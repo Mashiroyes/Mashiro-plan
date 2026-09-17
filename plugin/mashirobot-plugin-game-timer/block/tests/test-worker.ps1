@@ -15,6 +15,9 @@ try {
     $workerSource = Get-Content -LiteralPath $worker -Raw -Encoding UTF8
     if ($workerSource -notmatch '\$ClashReloadBudgetMs\s*=\s*12000') { throw 'Worker must use the bounded 12-second Clash reload budget.' }
     if ($workerSource -notmatch '\$reloadResult\.Error') { throw 'Worker must propagate the final Clash reload error.' }
+    if ($workerSource -notmatch 'function Invoke-ClashHttpReload') { throw 'Worker must define the loopback HTTP reload transport.' }
+    if ($workerSource -notmatch 'http://127\.0\.0\.1:9097/configs\?force=true') { throw 'Worker HTTP fallback must remain loopback-only.' }
+    if ($workerSource -notmatch 'UseProxy\s*=\s*\$false') { throw 'Worker HTTP fallback must bypass configured proxies.' }
     $syntax = & (Get-Command pwsh.exe).Source -NoProfile -NonInteractive -File $worker -Mode Status -StateRoot $root
     if ($LASTEXITCODE -ne 0 -or $syntax -notmatch '"ok":true') { throw "Worker status failed: $syntax" }
     & $node (Join-Path $plugin 'tests\worker-fixture.mjs') $db

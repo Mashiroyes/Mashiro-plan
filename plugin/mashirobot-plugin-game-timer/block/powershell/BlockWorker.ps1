@@ -239,38 +239,74 @@ function Get-ClashGeneratedPaths($state) {
     ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
 }
 
+function Invoke-ClashHttpReload([string]$bodyJson, [int]$timeoutMs) {
+    $handler = [Net.Http.SocketsHttpHandler]::new()
+    $handler.UseProxy = $false
+    $client = [Net.Http.HttpClient]::new($handler)
+    $client.Timeout = [TimeSpan]::FromMilliseconds($timeoutMs)
+    $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Put, 'http://127.0.0.1:9097/configs?force=true')
+    $request.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', 'set-your-secret')
+    $request.Content = [Net.Http.StringContent]::new($bodyJson, [Text.Encoding]::UTF8, 'application/json')
+    $response = $null
+    try {
+        $response = $client.Send($request)
+        $statusCode = [int]$response.StatusCode
+        if ($statusCode -notin @(200,204)) { return [pscustomobject]@{ Ok=$false; Error="HTTP controller returned status $statusCode." } }
+        return [pscustomobject]@{ Ok=$true; Error=$null }
+    } catch {
+        return [pscustomobject]@{ Ok=$false; Error=$_.Exception.Message }
+    } finally {
+        if ($response) { $response.Dispose() }
+        $request.Dispose()
+        $client.Dispose()
+        $handler.Dispose()
+    }
+}
+
+function Invoke-ClashPipeReload([byte[]]$bodyBytes, [byte[]]$headerBytes, [int]$timeoutMs) {
+    $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'verge-mihomo', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
+    try {
+        $connectTimeoutMs = [Math]::Min(1200, [Math]::Max(100, $timeoutMs))
+        $pipe.Connect($connectTimeoutMs)
+        $pipe.Write($headerBytes,0,$headerBytes.Length)
+        $pipe.Write($bodyBytes,0,$bodyBytes.Length)
+        $pipe.Flush()
+        $buffer = New-Object byte[] 8192
+        $read = $pipe.ReadAsync($buffer,0,$buffer.Length)
+        $responseTimeoutMs = [Math]::Min(2500, [Math]::Max(100, $timeoutMs))
+        if (-not $read.Wait($responseTimeoutMs)) { throw 'Clash reload response timed out.' }
+        $response = [Text.Encoding]::UTF8.GetString($buffer,0,$read.Result)
+        if ($response -notmatch '^HTTP/1\.1 (?:200|204)') { throw "Clash reload failed: $($response.Split("`r`n")[0])" }
+        return [pscustomobject]@{ Ok=$true; Error=$null }
+    } catch {
+        return [pscustomobject]@{ Ok=$false; Error=$_.Exception.Message }
+    } finally { $pipe.Dispose() }
+}
+
 function Invoke-ClashReload([string]$configPath) {
     if ($DryRun -or -not $configPath) { return [pscustomobject]@{ Ok=$true; Error=$null } }
-    $bodyBytes = [Text.Encoding]::UTF8.GetBytes((@{ path=$configPath } | ConvertTo-Json -Compress))
+    $bodyJson = @{ path=$configPath } | ConvertTo-Json -Compress
+    $bodyBytes = [Text.Encoding]::UTF8.GetBytes($bodyJson)
     $headers = "PUT /configs?force=true HTTP/1.1`r`nHost: localhost`r`nAuthorization: Bearer set-your-secret`r`nContent-Type: application/json`r`nContent-Length: $($bodyBytes.Length)`r`nConnection: close`r`n`r`n"
     $headerBytes = [Text.Encoding]::ASCII.GetBytes($headers)
     $timer = [Diagnostics.Stopwatch]::StartNew()
-    $lastError = 'The verge-mihomo named pipe was unavailable.'
+    $lastHttpError = 'The loopback HTTP controller was unavailable.'
+    $lastPipeError = 'The verge-mihomo named pipe was unavailable.'
     while ($timer.ElapsedMilliseconds -lt $ClashReloadBudgetMs) {
-        $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'verge-mihomo', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
-        try {
-            $remainingMs = [int]($ClashReloadBudgetMs - $timer.ElapsedMilliseconds)
-            if ($remainingMs -le 0) { break }
-            $connectTimeoutMs = [Math]::Min(1200, [Math]::Max(100, $remainingMs))
-            $pipe.Connect($connectTimeoutMs)
-            $pipe.Write($headerBytes,0,$headerBytes.Length)
-            $pipe.Write($bodyBytes,0,$bodyBytes.Length)
-            $pipe.Flush()
-            $buffer = New-Object byte[] 8192
-            $read = $pipe.ReadAsync($buffer,0,$buffer.Length)
-            $remainingMs = [int]($ClashReloadBudgetMs - $timer.ElapsedMilliseconds)
-            $responseTimeoutMs = [Math]::Min(2500, [Math]::Max(100, $remainingMs))
-            if (-not $read.Wait($responseTimeoutMs)) { throw 'Clash reload response timed out.' }
-            $response = [Text.Encoding]::UTF8.GetString($buffer,0,$read.Result)
-            if ($response -notmatch '^HTTP/1\.1 (?:200|204)') { throw "Clash reload failed: $($response.Split("`r`n")[0])" }
-            return [pscustomobject]@{ Ok=$true; Error=$null }
-        } catch {
-            $lastError = $_.Exception.Message
-        } finally { $pipe.Dispose() }
+        $remainingMs = [int]($ClashReloadBudgetMs - $timer.ElapsedMilliseconds)
+        if ($remainingMs -le 0) { break }
+        $httpResult = Invoke-ClashHttpReload $bodyJson ([Math]::Min(1500, [Math]::Max(100, $remainingMs)))
+        if ($httpResult.Ok) { return $httpResult }
+        $lastHttpError = $httpResult.Error
+        $remainingMs = [int]($ClashReloadBudgetMs - $timer.ElapsedMilliseconds)
+        if ($remainingMs -le 0) { break }
+        $pipeResult = Invoke-ClashPipeReload $bodyBytes $headerBytes $remainingMs
+        if ($pipeResult.Ok) { return $pipeResult }
+        $lastPipeError = $pipeResult.Error
         $remainingMs = [int]($ClashReloadBudgetMs - $timer.ElapsedMilliseconds)
         if ($remainingMs -gt 0) { Start-Sleep -Milliseconds ([Math]::Min($ClashReloadRetryDelayMs, $remainingMs)) }
     }
-    return [pscustomobject]@{ Ok=$false; Error=$lastError }
+    return [pscustomobject]@{ Ok=$false; Error="HTTP: $lastHttpError; pipe: $lastPipeError" }
 }
 
 function Set-ClashRules($domains, $releasedDomains, $state) {
@@ -302,7 +338,7 @@ function Set-ClashRules($domains, $releasedDomains, $state) {
         $state.ClashReloadPending = -not [bool]$reloadResult.Ok
         if (-not $reloadResult.Ok) {
             Save-State $state
-            throw "Clash configuration was updated, but the core reload pipe remained unavailable after retries. Last error: $($reloadResult.Error)"
+            throw "Clash configuration was updated, but both reload transports remained unavailable after retries. Last error: $($reloadResult.Error)"
         }
     }
     $state.ClashManagedDomains = @($domains)
