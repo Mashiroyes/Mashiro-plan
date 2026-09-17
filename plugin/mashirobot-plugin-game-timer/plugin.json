@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "mashirobot-plugin-game-timer",
+  "name": "游戏计时与禁止名单",
+  "version": "2.2.0",
+  "description": "游戏限时提醒、强退后的游戏和QQ启动文件保护、超时强制退出以及软件和网站禁止规则",
+  "menuIndex": 2,
+  "priority": 250,
+  "enabled": true,
+  "entry": "index.mjs",
+  "exactCommands": [
+    "/游戏计时",
+    "/游戏计时详细",
+    "/禁止名单",
+    "/禁止名单详细"
+  ]
+}

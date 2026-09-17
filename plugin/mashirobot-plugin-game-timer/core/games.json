@@ -1,0 +1,134 @@
+{
+  "games": [
+    {
+      "key": "dont-starve-together",
+      "displayName": "饥荒联机版",
+      "aliases": [
+        "饥荒",
+        "Don't Starve Together",
+        "DST"
+      ],
+      "processName": "dontstarve_steam_x64.exe",
+      "executablePath": "E:\\SteamLibrary\\steamapps\\common\\Don't Starve Together\\bin64\\dontstarve_steam_x64.exe",
+      "steamId": "322330"
+    },
+    {
+      "key": "wallpaper-engine",
+      "displayName": "Wallpaper Engine",
+      "aliases": [
+        "壁纸引擎"
+      ],
+      "processName": "wallpaper64.exe",
+      "executablePath": "E:\\SteamLibrary\\steamapps\\common\\wallpaper_engine\\wallpaper64.exe",
+      "steamId": "431960"
+    },
+    {
+      "key": "euro-truck-simulator-2",
+      "displayName": "Euro Truck Simulator 2",
+      "aliases": [
+        "欧洲卡车模拟2",
+        "欧卡2"
+      ],
+      "processName": "eurotrucks2.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\Euro Truck Simulator 2\\bin\\win_x64\\eurotrucks2.exe",
+      "steamId": "227300"
+    },
+    {
+      "key": "the-witcher-3",
+      "displayName": "巫师3",
+      "aliases": [
+        "巫师 3",
+        "The Witcher 3"
+      ],
+      "processName": "witcher3.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\The Witcher 3\\bin\\x64_dx12\\witcher3.exe",
+      "steamId": "292030"
+    },
+    {
+      "key": "northgard",
+      "displayName": "Northgard",
+      "aliases": [
+        "北境之地"
+      ],
+      "processName": "Northgard.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\Northgard\\Northgard.exe",
+      "steamId": "466560"
+    },
+    {
+      "key": "muv-luv",
+      "displayName": "Muv-Luv",
+      "aliases": [
+        "MuvLuv"
+      ],
+      "processName": "muvluv16.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\Muv-Luv\\muvluv16.exe",
+      "steamId": "802880"
+    },
+    {
+      "key": "muv-luv-alternative",
+      "displayName": "Muv-Luv Alternative",
+      "aliases": [
+        "Muv-Luv Alternative"
+      ],
+      "processName": "Muv-Luv_Alternative16.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\Muv-Luv Alternative\\Muv-Luv_Alternative16.exe",
+      "steamId": "802890"
+    },
+    {
+      "key": "aokana",
+      "displayName": "Aokana",
+      "aliases": [],
+      "processName": "Aokana.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\Aokana\\Aokana.exe",
+      "steamId": "1044620"
+    },
+    {
+      "key": "aokana-extra2",
+      "displayName": "Aokana EXTRA2",
+      "aliases": [
+        "Aokana EXTRA2"
+      ],
+      "processName": "AokanaEXTRA2.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\Aokana - EXTRA2\\AokanaEXTRA2.exe",
+      "steamId": "2206340"
+    },
+    {
+      "key": "elden-ring",
+      "displayName": "艾尔登法环",
+      "aliases": [
+        "ELDEN RING"
+      ],
+      "processName": "eldenring.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\ELDEN RING\\Game\\eldenring.exe",
+      "steamId": "1245620"
+    },
+    {
+      "key": "black-sheep-town",
+      "displayName": "BLACK SHEEP TOWN",
+      "aliases": [
+        "黑羊镇"
+      ],
+      "processName": "Bst.exe",
+      "executablePath": "F:\\SteamLibrary\\steamapps\\common\\BLACK SHEEP TOWN\\Bst.exe",
+      "steamId": "2101350"
+    },
+    {
+      "key": "eden",
+      "displayName": "Eden",
+      "aliases": [
+        "Eden-v0.0.4-win"
+      ],
+      "processName": "eden.exe",
+      "executablePath": "D:\\BaiduSyncdisk\\Tools\\Galgame\\Emulator\\Yuzu\\Eden-v0.0.4-win\\eden.exe",
+      "steamId": null
+    },
+    {
+      "key": "game-1789413166646",
+      "displayName": "霞外籠逗留記",
+      "aliases": [],
+      "processName": "kagerou.exe",
+      "executablePath": "F:\\Game\\raiL\\霞外籠逗留記\\kagerou.exe",
+      "steamId": null
+    }
+  ]
+}

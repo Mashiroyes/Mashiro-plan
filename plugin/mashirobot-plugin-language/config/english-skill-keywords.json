@@ -1,0 +1,85 @@
+{
+  "precedence": [
+    "writing",
+    "speaking",
+    "listening",
+    "reading",
+    "anki"
+  ],
+  "labels": {
+    "listening": "听",
+    "speaking": "说",
+    "reading": "读",
+    "writing": "写",
+    "anki": "Anki"
+  },
+  "keywords": {
+    "listening": [
+      "听力",
+      "精听",
+      "泛听",
+      "听写",
+      "播客",
+      "podcast"
+    ],
+    "speaking": [
+      "chatgpt聊天",
+      "ai聊天",
+      "gemini聊天",
+      "grok聊天",
+      "claude聊天",
+      "deepseek聊天",
+      "元宝聊天",
+      "口语",
+      "跟读",
+      "朗读",
+      "复述",
+      "英语聊天",
+      "英文聊天",
+      "影子跟读",
+      "shadowing"
+    ],
+    "reading": [
+      "阅读",
+      "英文小说",
+      "哈利波特",
+      "harry potter",
+      "the new sun",
+      "the book of the new sun"
+    ],
+    "writing": [
+      "chatgpt对话",
+      "ai对话",
+      "gemini对话",
+      "grok对话",
+      "claude对话",
+      "deepseek对话",
+      "元宝对话",
+      "对话",
+      "英语作文",
+      "英文作文",
+      "作文",
+      "日志",
+      "写作",
+      "日记",
+      "journal",
+      "essay"
+    ],
+    "anki": [
+      "anki",
+      "背单词",
+      "单词复习"
+    ]
+  },
+  "customKeywords": {
+    "listening": [],
+    "speaking": [],
+    "reading": [
+      "上古卷轴5wiki",
+      "老滚5wiki",
+      "厄舍府之倒塌",
+      "瓦尔登湖"
+    ],
+    "writing": []
+  }
+}

@@ -1,0 +1,13 @@
+# Local runtime data and backups
+/cache/
+/tmp/
+/sqlite/
+*.sqlite
+*.sqlite-*
+
+# Generated files
+__pycache__/
+*.py[cod]
+node_modules/
+**/bin/
+**/obj/

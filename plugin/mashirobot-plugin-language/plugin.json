@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "mashirobot-plugin-language",
+  "name": "语言学习",
+  "version": "1.0.0",
+  "description": "英语听说读写统计与关键词管理",
+  "menuIndex": 6,
+  "priority": 210,
+  "enabled": true,
+  "entry": "index.mjs",
+  "exactCommands": ["/语言", "/语言详细"]
+}

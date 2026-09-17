@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "mashirobot-plugin-financial-report",
+  "name": "财报与招股书",
+  "version": "1.0.0",
+  "description": "零基础财报与招股书课程、进度和聊天点评",
+  "menuIndex": 5,
+  "priority": 220,
+  "enabled": false,
+  "entry": "index.mjs",
+  "exactCommands": ["/财报课程", "/财报课程详细"]
+}

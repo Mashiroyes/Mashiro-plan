@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "mashirobot-plugin-loot",
+  "name": "战利品",
+  "version": "1.0.0",
+  "description": "记录当天爽点并在次日回放",
+  "menuIndex": 4,
+  "priority": 230,
+  "enabled": true,
+  "entry": "index.mjs",
+  "exactCommands": ["/战利品", "/战利品详细"]
+}

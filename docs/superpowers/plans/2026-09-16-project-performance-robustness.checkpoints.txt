@@ -1,0 +1,179 @@
+Task 1
+c62bcabf96f34c13ef221b853c6adf4b32502ff6958089a7935809ebd078de38  plan/tools/plugin-integrity.ps1
+de513f7da6e0d16c7a9ae58878e2c1e9411bb3dc35ad418ca000be236bea3f6d  plan/tools/benchmark-local-routes.mjs
+3b967e62dccce0ae36d8c25ab20ef8e05f8e7066240a74c7896d2812b5314225  plan/tests/plugin-integrity.test.mjs
+Baseline snapshot: C:/Users/Mashiroyes/AppData/Local/MashiroBot/integrity/financial-report-before.json
+Baseline performance: C:/Users/Mashiroyes/AppData/Local/MashiroBot/integrity/performance-before.json
+Verification: 131 tests, 129 passed, 2 skipped, 0 failed
+
+Task 2
+75cc6db3a66f177f59a44dc9b9c07095897bdbc1a47b0e784288fb7473bbe1dd  plan/core/execution/local-process.mjs
+fcf14930c9dee83214eaf3326090152071712a34cc62ff503fcd1fb48a5887b4  plan/tests/local-process.test.mjs
+Verification: focused 18 tests passed; full non-financial suite 149 tests, 147 passed, 2 skipped, 0 failed
+
+Task 3
+a8f9cb54d052549231c745adb38b251aa20b11c0032938117a5ec8aa57036981  plan/core/router/plugin-router.mjs
+46e091e1c49a5925c4364cd178780052bc32cf48bb17209021e9776ca8dbc8d5  plan/core/loader/plugin-loader.mjs
+619ac84b407e00d413d15fd0acdc466a3c48d3b49d654626079eb9c8035810db  plan/core/index.mjs
+d4c84dd59e261892e80edf7a202fa12e589266a22b6f6c27c060084a685f9087  plan/core/bridge/context.mjs
+d6073a3b52c97ec7ffdd38d350fa398de3237514227515eb9b5a8c3ea0f361e1  plan/core/adapter/repair-openclaw-adapter.ps1
+d1e716af5665138496bfd6000459506fa057ca6f1c3d7bc2e8b6f6fcb8b0d484  plan/core/logging/logger.mjs
+f509363708c23cfbf08756f7785c4bdd85a5d896603e6db29a7415e50f373401  plan/core/menu/help-service.mjs
+565c0054b2ec0e9fdb69ed56ea51efc84067f4d607bf9bb33faadec5bedb68ef  plan/tests/plugin-router.test.mjs
+46d1ee2e19d4ff53bf7cdf5b6bb560d22f51c44cc04f7ea99e75bccf1ed01ad8  plan/tests/plugin-loader.test.mjs
+0dd6b2431812e1285056eaad82e76fd53674213e0bee73e3c1bd42ffbfad0f19  plan/tests/test_adapter_repair.ps1
+698bad29638b093e248176995016a5e360ea68a2dc4cbbc924ea0efcae66a610  plan/tests/router-concurrency.test.mjs
+a65d7deaed4fd42d702a041dc64de5cc59a2f5b72df5d1daaf3dc9818bfa05db  plan/tests/help-service.test.mjs
+Verification: core 47 tests passed; review-focused 44 tests passed; adapter repair/rollback/idempotence/wrapper tests passed; full non-financial suite 158 tests, 156 passed, 2 skipped, 0 failed
+
+Task 4
+164e60e843b0c075067c87c9ef9824af3bb7ef81151cf54acd3b05713cc1fac8  plan/core/cache/content-cache.mjs
+5b00ec8d48dbe8e7e3ccdcd8372d05958ab404d81480aaea84a240708301ea81  plan/core/menu/help-service.mjs
+38aafaf5e32f16304bc36f9df8da1e495ec9b17bbd103f09e257c3d9799c445c  plan/core/menu/render_help.py
+21ee4e4f0955f8e8988e7b6695a475997da47b42a360ad64a84149a7b14ca0a9  plan/tests/content-cache.test.mjs
+5483dbf2281540dd21b62444a69dbaaa0e255111c52e06aebbbcf60b328a97bc  plan/tests/help-service.test.mjs
+Verification: node --check passed; third-review-fixed focused cache/help/router 43 tests passed; Task 4 sync gate passed; excluded financial plugin integrity unchanged
+Note: full non-financial verification completed before the later instruction to defer further broad suites; no additional broad test was run.
+
+Task 5
+5d474c14a9571ff553e0a0866b218fc9da473c69e76bc56275d3c7f920a5aa4c  plan/plugin/mashirobot-plugin-status/core/collector.mjs
+68cf25361dfc719d0b0cfb08f55d081c02f67062936b89a854948953fd8a681a  plan/plugin/mashirobot-plugin-status/core/status-cache.mjs
+4666e189d71084cdfabeba497e54bb20ceb008355dff8da2aa9fd83bb1e62df5  plan/plugin/mashirobot-plugin-status/index.mjs
+c61a8355eabb8a76eb1f68c76759152e05e4a5fa9da27dbd48b004a76f7b1f25  plan/plugin/mashirobot-plugin-status/render/status-card.py
+4117147cf9ee4bd11332328c176075de25cc31ab15a6e7ef40758248e5bca3db  plan/plugin/mashirobot-plugin-status/powershell/status-collector.ps1
+3a7c6b2afcedf4291c5a46be79873d8822919c634aef819adaba6eb8dd2e61c3  plan/plugin/mashirobot-plugin-status/tests/collector.test.mjs
+be91fee036f7b70470d53e2c55c9d7a528f618eb3bae570c018bb9d26c42450f  plan/plugin/mashirobot-plugin-status/tests/plugin.test.mjs
+88e91015eacca02b85e601e875887b30d0e6524dcb42102b1b154e3b357e7f5c  plan/plugin/mashirobot-plugin-status/tests/cache.test.mjs
+Verification: status focused 10 tests passed; PowerShell syntax passed; no synchronous child-process API remains in the status plugin; excluded financial plugin integrity unchanged
+
+Task 6
+24745f98d9a6608570fd6b6ac6d88d22ca6614f32cca0e501be64869a5171953  plan/plugin/mashirobot-plugin-plan/bridge/planner-runner.mjs
+89222fc3d1895ba819352d55730f5e0d9b8fb3fe442b2b5b318c694302ba5c3b  plan/plugin/mashirobot-plugin-language/index.mjs
+3e01169ff124047d138f3e32ce9fc0358b2f45d2c766aa650b05edfea57ea456  plan/plugin/mashirobot-plugin-language/tests/plugin.test.mjs
+1c61bf9ea9325759ccd473140a0306b3eb05174e43269fc931bfaa321578e4a2  plan/plugin/mashirobot-plugin-language/tests/cache.test.mjs
+288697c42ecb20502d51dabd7f6975f00248f0003f7239b70f1920a6631ba65e  plan/plugin/mashirobot-plugin-plan/tests/english-skills-route.test.mjs
+e487ef47c8bf3227f6b2ab159fbf200af264dfb51a8d87604dffd95cf609c582  plan/plugin/mashirobot-plugin-plan/planner/database.py
+Verification: language and English-route focused 7 tests passed; Node/Python syntax passed; no synchronous child-process API remains in language or planner bridge
+
+Task 7
+0aaeb0ee170501b419de9357073fb9d7a78e46f46178934a976747ef5ce3e70b  plan/plugin/mashirobot-plugin-plan/index.mjs
+9c4007f41f890937cf538445eb896cce572fda4c6dfeed56314ac301a53a2504  plan/plugin/mashirobot-plugin-plan/routes/index.mjs
+c3aa0e374c23a3c3be1d2ef37aad1ad091dab16b96109648f10d02bb76a36156  plan/plugin/mashirobot-plugin-plan/routes/plan.mjs
+18867adf8b95d6edf0cc6ca5d2084f42e1413c5cb37f31bdabead7e2f8c731b6  plan/plugin/mashirobot-plugin-plan/routes/record.mjs
+18cd93b5c3a46ecbb9a0ae556fea886c5912af9c36ebdd80fab874bcfbb8855d  plan/plugin/mashirobot-plugin-plan/routes/reminder.mjs
+44e894776ad7e771488482f49d4670741657101a1df98e8b3371b147b9f52410  plan/plugin/mashirobot-plugin-plan/routes/routine.mjs
+fe8fab045482f327b845b6dc742f6b64370f72268366906af358e46c48bacb92  plan/plugin/mashirobot-plugin-plan/routes/sleep.mjs
+9b306fc93f9d76ba5e1b6a571499801bac54d0e7eefea5bdc971c3b29cf1f3c7  plan/plugin/mashirobot-plugin-plan/routes/wakeup.mjs
+e53ceb5ac9df92a4d5753dbb484da50b79524839805786b8c8ca18e5359b0b52  plan/plugin/mashirobot-plugin-plan/windows/manage-plan.ps1
+692eb2be26eececf3a0689852596b5583c7c36169527e0b3427e62c4dd4b61f8  plan/plugin/mashirobot-plugin-plan/windows/routine-reminder.ps1
+38056c2563efb2abf887aaa567bccf97d176d11f4da453222f20dd83605fd2b1  plan/plugin/mashirobot-plugin-plan/windows/plan-reminder-worker.ps1
+b1f9e6287dbe7dcb36ba0f601d13c6ab2028d092b042e0bc90ad3cbd799d335a  plan/plugin/mashirobot-plugin-plan/planner/planner.py
+5e7459530821f79aef40e5094ced885b4915fa6a285b197b407211f363300a47  plan/plugin/mashirobot-plugin-plan/planner/database.py
+91c6ce158f3c57a39c427b56f75ffd2f32cb495edc7af504caf1f032b9ba01ed  plan/plugin/mashirobot-plugin-plan/tests/route-compatibility.test.mjs
+060a2308ab37d0db584a1fce40873df6987525c03b9b87aa5a591ba87f09c366  plan/plugin/mashirobot-plugin-plan/tests/wakeup-fast-path.test.mjs
+6b1761099acfaf219e1bcd2a3406cfc7cff229a7abe7dd724b8493b3db8bbfda  plan/plugin/mashirobot-plugin-plan/tests/verified-outcome.test.mjs
+bb88031fe13c25ab345e5168ba168150535222cb37e6bbdd450294b6302ac250  plan/plugin/mashirobot-plugin-plan/bridge/planner-runner.mjs
+Verification: plan focused 22 tests passed (20 pass, 2 intentional skips); PowerShell syntax passed; temporary DryRun JSON verified operationId and outcome flags without creating tasks
+
+Task 8
+1ecfd593197101152408f1a43d56b9d2d8e4bbeadd7f902a152ef88169a56c06  plan/plugin/mashirobot-plugin-game-timer/index.mjs
+96c805adbac9a88f37fa0275e9718d6acf048acf9ff572081843955f8fbcf8e4  plan/plugin/mashirobot-plugin-game-timer/core/scheduler.mjs
+a46e0058d7878df20f00d1a274c96fe6dc1223445d5bb97866f4ee29d3fe6492  plan/plugin/mashirobot-plugin-game-timer/core/qq-session-scheduler.mjs
+7063167bde7db6538fa7305dabfc40d16464da31ec9ca533c0ac8800f242aac5  plan/plugin/mashirobot-plugin-game-timer/block/core/syncer.mjs
+05efa0b9f024f593f83ea5b5cfcee592b5671cfce3a3378d4b9bc49b0c3151ff  plan/plugin/mashirobot-plugin-game-timer/block/index.mjs
+6c6abf4ce566187d908f458d4c06ca9ef0714776b680ff7a77c9a61f508182d5  plan/plugin/mashirobot-plugin-game-timer/tests/plugin.test.mjs
+6b4bbd9766ead0cb5339c1bd0ef60cbddca1caa5d0146a806430c5e54cdbdc62  plan/plugin/mashirobot-plugin-game-timer/tests/scheduler.test.mjs
+5a00cc409641a885cbb549006557042422d30299d434719bd4acaa4b34257e7e  plan/plugin/mashirobot-plugin-game-timer/tests/qq-scheduler.test.mjs
+927fbe1870235773db6dedd03e8caed000df5bb1229cfaced20a99389c0997f3  plan/plugin/mashirobot-plugin-game-timer/tests/qq-plugin.test.mjs
+f84239b5ac073c34c424d68c02f608beef4e69ddf4f4896fe5a0a6aa0b7068d8  plan/plugin/mashirobot-plugin-game-timer/tests/nonblocking.test.mjs
+acb6af2cbda627dfdf1682923e7bb664cb6b6073784dbdb764bf31a6cac7acf6  plan/plugin/mashirobot-plugin-game-timer/block/tests/syncer.test.mjs
+5973c657fb0cca237e6c24086d22c6a14155b243ee89167d48e404092456e5fa  plan/plugin/mashirobot-plugin-game-timer/block/tests/plugin.test.mjs
+Verification: game timer, QQ, block and audit focused 53 tests passed; message-path blocking API search gate passed
+
+Task 9
+9705c9b75575875c40f454c30b5a6783293cc82ce6464304b7a9968e6f6f4a57  plan/plugin/mashirobot-plugin-loot/core/store.mjs
+8e477e7605fd9eee33dbdd525b18f6a2276a885f780343e96883757039be2eaf  plan/plugin/mashirobot-plugin-loot/core/worker-cli.mjs
+1a1d318c9a1f15d283a2b0a5585ed76f451f62c760473385f3e053072473574b  plan/plugin/mashirobot-plugin-loot/core/database-cli.mjs
+1110023d31d0e5594d1b991883c384986061f85316926060c5705dffee1ba270  plan/plugin/mashirobot-plugin-loot/tests/store.test.mjs
+979c2bc37b948e5616bbbe0e250dc10089168e0dda7b7ad206a11364c95aa404  plan/plugin/mashirobot-plugin-loot/tests/worker-cli.test.mjs
+f64918f918a9d4e76cf80e1583e5018f7ee4a2fd78c593af2a778e166bf0d364  plan/plugin/mashirobot-plugin-loot/tests/plugin.test.mjs
+af9d81d7899202f8abde86b535254be7414bbb52c46b471e9ef946a4c594082a  plan/plugin/mashirobot-plugin-plan/health.mjs
+b40006b8be5e06e60601924087818daeb7155f4bc0238492084822d80ef5eb52  plan/core/health/check-mashirobot.ps1
+1e8a726440f5cd25352e1941b8e7cb0afc9a593b610ac3e356c424e10f503f41  plan/tests/health-contract.test.mjs
+Verification: loot and health focused 19 tests passed; live health contract ran and correctly reported one pending installed-adapter repair while QQ heartbeat and source plugin health passed
+
+Task 10 final current hashes
+d6073a3b52c97ec7ffdd38d350fa398de3237514227515eb9b5a8c3ea0f361e1  plan/core/adapter/repair-openclaw-adapter.ps1
+d4c84dd59e261892e80edf7a202fa12e589266a22b6f6c27c060084a685f9087  plan/core/bridge/context.mjs
+164e60e843b0c075067c87c9ef9824af3bb7ef81151cf54acd3b05713cc1fac8  plan/core/cache/content-cache.mjs
+75cc6db3a66f177f59a44dc9b9c07095897bdbc1a47b0e784288fb7473bbe1dd  plan/core/execution/local-process.mjs
+b40006b8be5e06e60601924087818daeb7155f4bc0238492084822d80ef5eb52  plan/core/health/check-mashirobot.ps1
+619ac84b407e00d413d15fd0acdc466a3c48d3b49d654626079eb9c8035810db  plan/core/index.mjs
+46e091e1c49a5925c4364cd178780052bc32cf48bb17209021e9776ca8dbc8d5  plan/core/loader/plugin-loader.mjs
+d1e716af5665138496bfd6000459506fa057ca6f1c3d7bc2e8b6f6fcb8b0d484  plan/core/logging/logger.mjs
+5b00ec8d48dbe8e7e3ccdcd8372d05958ab404d81480aaea84a240708301ea81  plan/core/menu/help-service.mjs
+38aafaf5e32f16304bc36f9df8da1e495ec9b17bbd103f09e257c3d9799c445c  plan/core/menu/render_help.py
+a8f9cb54d052549231c745adb38b251aa20b11c0032938117a5ec8aa57036981  plan/core/router/plugin-router.mjs
+ed34ffc764b672f3ee8bdd626950f3836a3612275dcc42eda38ae8b5cb9db313  plan/docs/superpowers/plans/2026-09-16-project-performance-robustness-results.md
+7cc6f920def1c88ea8e4030b2a74b9c32e0b38ad4d67390ebb9bfe108bce1cb4  plan/docs/superpowers/plans/2026-09-16-project-performance-robustness.md
+7063167bde7db6538fa7305dabfc40d16464da31ec9ca533c0ac8800f242aac5  plan/plugin/mashirobot-plugin-game-timer/block/core/syncer.mjs
+05efa0b9f024f593f83ea5b5cfcee592b5671cfce3a3378d4b9bc49b0c3151ff  plan/plugin/mashirobot-plugin-game-timer/block/index.mjs
+5973c657fb0cca237e6c24086d22c6a14155b243ee89167d48e404092456e5fa  plan/plugin/mashirobot-plugin-game-timer/block/tests/plugin.test.mjs
+acb6af2cbda627dfdf1682923e7bb664cb6b6073784dbdb764bf31a6cac7acf6  plan/plugin/mashirobot-plugin-game-timer/block/tests/syncer.test.mjs
+a46e0058d7878df20f00d1a274c96fe6dc1223445d5bb97866f4ee29d3fe6492  plan/plugin/mashirobot-plugin-game-timer/core/qq-session-scheduler.mjs
+96c805adbac9a88f37fa0275e9718d6acf048acf9ff572081843955f8fbcf8e4  plan/plugin/mashirobot-plugin-game-timer/core/scheduler.mjs
+1ecfd593197101152408f1a43d56b9d2d8e4bbeadd7f902a152ef88169a56c06  plan/plugin/mashirobot-plugin-game-timer/index.mjs
+f84239b5ac073c34c424d68c02f608beef4e69ddf4f4896fe5a0a6aa0b7068d8  plan/plugin/mashirobot-plugin-game-timer/tests/nonblocking.test.mjs
+6c6abf4ce566187d908f458d4c06ca9ef0714776b680ff7a77c9a61f508182d5  plan/plugin/mashirobot-plugin-game-timer/tests/plugin.test.mjs
+927fbe1870235773db6dedd03e8caed000df5bb1229cfaced20a99389c0997f3  plan/plugin/mashirobot-plugin-game-timer/tests/qq-plugin.test.mjs
+5a00cc409641a885cbb549006557042422d30299d434719bd4acaa4b34257e7e  plan/plugin/mashirobot-plugin-game-timer/tests/qq-scheduler.test.mjs
+6b4bbd9766ead0cb5339c1bd0ef60cbddca1caa5d0146a806430c5e54cdbdc62  plan/plugin/mashirobot-plugin-game-timer/tests/scheduler.test.mjs
+89222fc3d1895ba819352d55730f5e0d9b8fb3fe442b2b5b318c694302ba5c3b  plan/plugin/mashirobot-plugin-language/index.mjs
+1c61bf9ea9325759ccd473140a0306b3eb05174e43269fc931bfaa321578e4a2  plan/plugin/mashirobot-plugin-language/tests/cache.test.mjs
+3e01169ff124047d138f3e32ce9fc0358b2f45d2c766aa650b05edfea57ea456  plan/plugin/mashirobot-plugin-language/tests/plugin.test.mjs
+1a1d318c9a1f15d283a2b0a5585ed76f451f62c760473385f3e053072473574b  plan/plugin/mashirobot-plugin-loot/core/database-cli.mjs
+9705c9b75575875c40f454c30b5a6783293cc82ce6464304b7a9968e6f6f4a57  plan/plugin/mashirobot-plugin-loot/core/store.mjs
+8e477e7605fd9eee33dbdd525b18f6a2276a885f780343e96883757039be2eaf  plan/plugin/mashirobot-plugin-loot/core/worker-cli.mjs
+f64918f918a9d4e76cf80e1583e5018f7ee4a2fd78c593af2a778e166bf0d364  plan/plugin/mashirobot-plugin-loot/tests/plugin.test.mjs
+1110023d31d0e5594d1b991883c384986061f85316926060c5705dffee1ba270  plan/plugin/mashirobot-plugin-loot/tests/store.test.mjs
+979c2bc37b948e5616bbbe0e250dc10089168e0dda7b7ad206a11364c95aa404  plan/plugin/mashirobot-plugin-loot/tests/worker-cli.test.mjs
+bb88031fe13c25ab345e5168ba168150535222cb37e6bbdd450294b6302ac250  plan/plugin/mashirobot-plugin-plan/bridge/planner-runner.mjs
+af9d81d7899202f8abde86b535254be7414bbb52c46b471e9ef946a4c594082a  plan/plugin/mashirobot-plugin-plan/health.mjs
+0aaeb0ee170501b419de9357073fb9d7a78e46f46178934a976747ef5ce3e70b  plan/plugin/mashirobot-plugin-plan/index.mjs
+5e7459530821f79aef40e5094ced885b4915fa6a285b197b407211f363300a47  plan/plugin/mashirobot-plugin-plan/planner/database.py
+b1f9e6287dbe7dcb36ba0f601d13c6ab2028d092b042e0bc90ad3cbd799d335a  plan/plugin/mashirobot-plugin-plan/planner/planner.py
+9c4007f41f890937cf538445eb896cce572fda4c6dfeed56314ac301a53a2504  plan/plugin/mashirobot-plugin-plan/routes/index.mjs
+c3aa0e374c23a3c3be1d2ef37aad1ad091dab16b96109648f10d02bb76a36156  plan/plugin/mashirobot-plugin-plan/routes/plan.mjs
+18867adf8b95d6edf0cc6ca5d2084f42e1413c5cb37f31bdabead7e2f8c731b6  plan/plugin/mashirobot-plugin-plan/routes/record.mjs
+18cd93b5c3a46ecbb9a0ae556fea886c5912af9c36ebdd80fab874bcfbb8855d  plan/plugin/mashirobot-plugin-plan/routes/reminder.mjs
+44e894776ad7e771488482f49d4670741657101a1df98e8b3371b147b9f52410  plan/plugin/mashirobot-plugin-plan/routes/routine.mjs
+fe8fab045482f327b845b6dc742f6b64370f72268366906af358e46c48bacb92  plan/plugin/mashirobot-plugin-plan/routes/sleep.mjs
+9b306fc93f9d76ba5e1b6a571499801bac54d0e7eefea5bdc971c3b29cf1f3c7  plan/plugin/mashirobot-plugin-plan/routes/wakeup.mjs
+288697c42ecb20502d51dabd7f6975f00248f0003f7239b70f1920a6631ba65e  plan/plugin/mashirobot-plugin-plan/tests/english-skills-route.test.mjs
+91c6ce158f3c57a39c427b56f75ffd2f32cb495edc7af504caf1f032b9ba01ed  plan/plugin/mashirobot-plugin-plan/tests/route-compatibility.test.mjs
+6b1761099acfaf219e1bcd2a3406cfc7cff229a7abe7dd724b8493b3db8bbfda  plan/plugin/mashirobot-plugin-plan/tests/verified-outcome.test.mjs
+060a2308ab37d0db584a1fce40873df6987525c03b9b87aa5a591ba87f09c366  plan/plugin/mashirobot-plugin-plan/tests/wakeup-fast-path.test.mjs
+e53ceb5ac9df92a4d5753dbb484da50b79524839805786b8c8ca18e5359b0b52  plan/plugin/mashirobot-plugin-plan/windows/manage-plan.ps1
+38056c2563efb2abf887aaa567bccf97d176d11f4da453222f20dd83605fd2b1  plan/plugin/mashirobot-plugin-plan/windows/plan-reminder-worker.ps1
+692eb2be26eececf3a0689852596b5583c7c36169527e0b3427e62c4dd4b61f8  plan/plugin/mashirobot-plugin-plan/windows/routine-reminder.ps1
+5d474c14a9571ff553e0a0866b218fc9da473c69e76bc56275d3c7f920a5aa4c  plan/plugin/mashirobot-plugin-status/core/collector.mjs
+68cf25361dfc719d0b0cfb08f55d081c02f67062936b89a854948953fd8a681a  plan/plugin/mashirobot-plugin-status/core/status-cache.mjs
+4666e189d71084cdfabeba497e54bb20ceb008355dff8da2aa9fd83bb1e62df5  plan/plugin/mashirobot-plugin-status/index.mjs
+4117147cf9ee4bd11332328c176075de25cc31ab15a6e7ef40758248e5bca3db  plan/plugin/mashirobot-plugin-status/powershell/status-collector.ps1
+c61a8355eabb8a76eb1f68c76759152e05e4a5fa9da27dbd48b004a76f7b1f25  plan/plugin/mashirobot-plugin-status/render/status-card.py
+88e91015eacca02b85e601e875887b30d0e6524dcb42102b1b154e3b357e7f5c  plan/plugin/mashirobot-plugin-status/tests/cache.test.mjs
+3a7c6b2afcedf4291c5a46be79873d8822919c634aef819adaba6eb8dd2e61c3  plan/plugin/mashirobot-plugin-status/tests/collector.test.mjs
+be91fee036f7b70470d53e2c55c9d7a528f618eb3bae570c018bb9d26c42450f  plan/plugin/mashirobot-plugin-status/tests/plugin.test.mjs
+21ee4e4f0955f8e8988e7b6695a475997da47b42a360ad64a84149a7b14ca0a9  plan/tests/content-cache.test.mjs
+1e8a726440f5cd25352e1941b8e7cb0afc9a593b610ac3e356c424e10f503f41  plan/tests/health-contract.test.mjs
+5483dbf2281540dd21b62444a69dbaaa0e255111c52e06aebbbcf60b328a97bc  plan/tests/help-service.test.mjs
+fcf14930c9dee83214eaf3326090152071712a34cc62ff503fcd1fb48a5887b4  plan/tests/local-process.test.mjs
+3b967e62dccce0ae36d8c25ab20ef8e05f8e7066240a74c7896d2812b5314225  plan/tests/plugin-integrity.test.mjs
+46d1ee2e19d4ff53bf7cdf5b6bb560d22f51c44cc04f7ea99e75bccf1ed01ad8  plan/tests/plugin-loader.test.mjs
+565c0054b2ec0e9fdb69ed56ea51efc84067f4d607bf9bb33faadec5bedb68ef  plan/tests/plugin-router.test.mjs
+698bad29638b093e248176995016a5e360ea68a2dc4cbbc924ea0efcae66a610  plan/tests/router-concurrency.test.mjs
+0dd6b2431812e1285056eaad82e76fd53674213e0bee73e3c1bd42ffbfad0f19  plan/tests/test_adapter_repair.ps1
+de513f7da6e0d16c7a9ae58878e2c1e9411bb3dc35ad418ca000be236bea3f6d  plan/tools/benchmark-local-routes.mjs
+c62bcabf96f34c13ef221b853c6adf4b32502ff6958089a7935809ebd078de38  plan/tools/plugin-integrity.ps1
+Verification: final blocking-call gate had no matches; unified Node suite 212 total / 210 passed / 2 intentional skips / 0 failed; adapter PowerShell suite passed; performance budgets passed; installed adapter repaired; gateway health and full health contract passed; safe installed-entry smoke checks passed; excluded financial plugin unchanged
+Repository status: no Git repository was present, so no commit was claimed.

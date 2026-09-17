@@ -1,0 +1,82 @@
+[
+  {
+    "sourceId": "annual-yili-2025",
+    "company": "伊利股份",
+    "documentTitle": "内蒙古伊利实业集团股份有限公司2025年年度报告",
+    "reportPeriod": "2025年度",
+    "officialUrl": "https://static.cninfo.com.cn/finalpage/2026-04-30/1225259562.PDF",
+    "retrievedAt": "2026-08-09",
+    "sha256": "d17b8c541c42f65d092317093eb0cfbb5aeed4f44eafa2d2f6182041cdcdbaac",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/yili-2025.pdf"
+  },
+  {
+    "sourceId": "annual-midea-2025",
+    "company": "美的集团",
+    "documentTitle": "美的集团股份有限公司2025年年度报告全文",
+    "reportPeriod": "2025年度",
+    "officialUrl": "https://static.cninfo.com.cn/finalpage/2026-03-31/1225065145.PDF",
+    "retrievedAt": "2026-08-09",
+    "sha256": "16f95f70527db59dcf2736f276a9479cf7ee917e5f71e4f6cbbe83acbad9f4b6",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/midea-2025.pdf"
+  },
+  {
+    "sourceId": "annual-sf-2025",
+    "company": "顺丰控股",
+    "documentTitle": "顺丰控股股份有限公司2025年度报告",
+    "reportPeriod": "2025年度",
+    "officialUrl": "https://static.cninfo.com.cn/finalpage/2026-03-31/1225057387.PDF",
+    "retrievedAt": "2026-08-09",
+    "sha256": "240c05b80783bc350ba9fedf22487bc4ed0e370ccd3943ed6c2736de06050ae2",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/sf-2025.pdf"
+  },
+  {
+    "sourceId": "annual-tencent-2025",
+    "company": "腾讯控股",
+    "documentTitle": "腾讯控股有限公司2025年报",
+    "reportPeriod": "2025年度",
+    "officialUrl": "https://static.www.tencent.com/uploads/2026/04/09/5c38a9ec3c5695da42c1534d63e4be0b.pdf",
+    "retrievedAt": "2026-08-09",
+    "sha256": "d19f183452e9b8d0c47bcb7543dcbf435b585b2610759b42c0cba7c13f7361c7",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/tencent-2025.pdf"
+  },
+  {
+    "sourceId": "ipo-nongfu-2020",
+    "company": "农夫山泉",
+    "documentTitle": "农夫山泉股份有限公司全球发售招股章程",
+    "reportPeriod": "2019年度",
+    "officialUrl": "https://www1.hkexnews.hk/listedco/listconews/sehk/2020/0825/2020082500026_c.pdf",
+    "retrievedAt": "2026-08-09",
+    "sha256": "0ccd4fd34d53384bab305753d8884ecae9d72c2df949865b1741b61caf314bce",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/nongfu-prospectus.pdf"
+  },
+  {
+    "sourceId": "ipo-popmart-2020",
+    "company": "泡泡玛特",
+    "documentTitle": "泡泡玛特国际集团有限公司全球发售招股章程",
+    "reportPeriod": "2019年度",
+    "officialUrl": "https://www.hkexnews.hk/listedco/listconews/sehk/2020/1201/2020120100100_c.pdf",
+    "retrievedAt": "2026-08-09",
+    "sha256": "465cd4b9e118532d07ee83ca12039bfca02e720c2b3b8ea9843742c7b30b40a4",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/popmart-prospectus.pdf"
+  },
+  {
+    "sourceId": "ipo-xiaomi-2018",
+    "company": "小米集团",
+    "documentTitle": "小米集团全球发售招股章程",
+    "reportPeriod": "2017年度",
+    "officialUrl": "https://www1.hkexnews.hk/listedco/listconews/sehk/2018/0625/ltn20180625034_c.pdf",
+    "retrievedAt": "2026-08-09",
+    "sha256": "45c82b7fff83477d3fd79bb2ceabd29283ad57a73e2e306ae4dcad6d93f092c9",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/xiaomi-prospectus.pdf"
+  },
+  {
+    "sourceId": "ipo-jdl-2021",
+    "company": "京东物流",
+    "documentTitle": "京东物流股份有限公司全球发售招股章程",
+    "reportPeriod": "2020年度",
+    "officialUrl": "https://www1.hkexnews.hk/listedco/listconews/sehk/2021/0517/2021051700092_c.pdf",
+    "retrievedAt": "2026-08-09",
+    "sha256": "b362818a42d0eda7dc9b8e03674751cbb9abdcc04c8fa93a1afe9ec6f1205c91",
+    "localVerificationPath": "MashiroBot/financial-report-source-check/jdlogistics-prospectus.pdf"
+  }
+]

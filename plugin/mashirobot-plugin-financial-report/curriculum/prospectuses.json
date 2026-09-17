@@ -1,0 +1,59 @@
+[
+  {
+    "courseType": "prospectus", "lessonNumber": 1, "company": "农夫山泉", "title": "先从产品结构看懂生意", "objective": "从招股书摘要识别公司的主要收入来源", "reading": "阅读第10页2019年各产品类别收入表", "facts": [
+      {"text": "包装饮用水产品收入", "value": "14346", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 10},
+      {"text": "茶饮料产品收入", "value": "3138", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 10},
+      {"text": "功能饮料产品收入", "value": "3779", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 10}
+    ], "explanation": "包装饮用水贡献59.7%的收入，是公司的基本盘；茶饮料和功能饮料则提供第二层增长来源。读招股书先弄清楚公司靠什么挣钱，再看利润。", "pitfall": "产品收入占比高只说明依赖度高，不能直接证明这项业务竞争力强。", "question": "农夫山泉2019年的核心收入来源是什么？这种结构带来什么风险？", "referencePoints": ["包装饮用水是核心，占收入59.7%", "过度依赖单一品类会放大需求或竞争变化的影响"], "sourceId": "ipo-nongfu-2020", "reportPeriod": "2019年度", "pageNumbers": [10], "units": ["百万元人民币", "%"], "estimatedMinutes": 15
+  },
+  {
+    "courseType": "prospectus", "lessonNumber": 2, "company": "农夫山泉", "title": "高毛利之后还要看净利润", "objective": "区分收入、毛利和净利润，并理解招股书风险披露", "reading": "阅读第15页财务摘要，并浏览第14页风险提示", "facts": [
+      {"text": "收入", "value": "24021", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 15},
+      {"text": "毛利", "value": "13311", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 15},
+      {"text": "年内利润", "value": "4954", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 15}
+    ], "explanation": "2019年毛利率为55.4%，但利润率为20.6%，中间还要扣销售、分销、行政和税费。招股书同时集中披露风险，正好用来检查高利润能否持续。", "pitfall": "把毛利率当成净利率，或只看亮点而跳过风险因素，都会高估公司。", "question": "为什么55.4%的毛利率最后只形成20.6%的利润率？", "referencePoints": ["毛利之后还有期间费用和所得税", "应结合渠道、营销和竞争风险判断可持续性"], "sourceId": "ipo-nongfu-2020", "reportPeriod": "2019年度", "pageNumbers": [14, 15], "units": ["百万元人民币", "%"], "estimatedMinutes": 17
+  },
+  {
+    "courseType": "prospectus", "lessonNumber": 3, "company": "泡泡玛特", "title": "IP是怎样变成收入的", "objective": "用IP分类收入理解潮玩公司的商业模式", "reading": "阅读第14页按IP划分的2019年收入", "facts": [
+      {"text": "Molly收入", "value": "456.018", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 14},
+      {"text": "自有IP收入小计", "value": "627.027", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 14},
+      {"text": "独家IP收入小计", "value": "597.362", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 14}
+    ], "explanation": "泡泡玛特既经营自有IP，也经营独家授权IP。Molly单个IP贡献27.1%的收入，说明明星IP既是增长来源，也是集中度风险。", "pitfall": "把所有IP都当成公司永久拥有的资产，会忽略授权期限、续约和分成条件。", "question": "自有IP与独家IP在商业风险上有什么不同？", "referencePoints": ["自有IP控制力通常更强", "独家IP存在授权续期、费用和失去授权风险"], "sourceId": "ipo-popmart-2020", "reportPeriod": "2019年度", "pageNumbers": [14], "units": ["百万元人民币", "%"], "estimatedMinutes": 16
+  },
+  {
+    "courseType": "prospectus", "lessonNumber": 4, "company": "泡泡玛特", "title": "高毛利与线下扩张", "objective": "把盈利能力与门店、机器人商店等渠道扩张联系起来", "reading": "阅读第15至16页财务摘要和第19页销售网络", "facts": [
+      {"text": "收入", "value": "1683.434", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 15},
+      {"text": "毛利", "value": "1090.334", "unit": "百万元人民币", "period": "2019年度", "pdfPage": 16},
+      {"text": "零售店数量", "value": "114", "unit": "家", "period": "2019年12月31日", "pdfPage": 19},
+      {"text": "机器人商店数量", "value": "825", "unit": "间", "period": "2019年12月31日", "pdfPage": 19}
+    ], "explanation": "2019年毛利率64.8%，同时公司运营114家零售店和825间机器人商店。高毛利为渠道扩张提供空间，但租金、选址、存货和客流会影响最终利润与现金。", "pitfall": "门店数量增长不等于同店销售增长，也不等于每家门店都赚钱。", "question": "评价泡泡玛特线下扩张时，除门店数量外还应追踪哪些指标？", "referencePoints": ["同店销售、单店收入和回本周期", "租金、存货周转和经营现金流"], "sourceId": "ipo-popmart-2020", "reportPeriod": "2019年度", "pageNumbers": [15, 16, 19], "units": ["百万元人民币", "家", "间", "%"], "estimatedMinutes": 18
+  },
+  {
+    "courseType": "prospectus", "lessonNumber": 5, "company": "小米集团", "title": "硬件、IoT与互联网服务", "objective": "从分部收入理解小米的商业模式组合", "reading": "阅读第15页2017年按业务划分的收入", "facts": [
+      {"text": "智能手机收入", "value": "80563.594", "unit": "百万元人民币", "period": "2017年度", "pdfPage": 15},
+      {"text": "IoT与生活消费产品收入", "value": "23447.823", "unit": "百万元人民币", "period": "2017年度", "pdfPage": 15},
+      {"text": "互联网服务收入", "value": "9896.389", "unit": "百万元人民币", "period": "2017年度", "pdfPage": 15}
+    ], "explanation": "智能手机贡献大部分收入，IoT扩大设备与用户触点，互联网服务则在用户基础上变现。三块业务不是孤立产品，而是一套相互带动的模型。", "pitfall": "只因互联网服务毛利可能较高，就忽略它依赖硬件销量和活跃用户基础。", "question": "为什么小米愿意让硬件承担获客和扩大用户规模的作用？", "referencePoints": ["硬件带来设备覆盖和活跃用户", "后续可通过互联网服务和生态产品变现"], "sourceId": "ipo-xiaomi-2018", "reportPeriod": "2017年度", "pageNumbers": [15], "units": ["百万元人民币"], "estimatedMinutes": 16
+  },
+  {
+    "courseType": "prospectus", "lessonNumber": 6, "company": "小米集团", "title": "收入占比揭示模式，也揭示依赖", "objective": "把分部金额换成占比并识别业务依赖", "reading": "继续阅读第15页分部收入占比", "facts": [
+      {"text": "智能手机收入占比", "value": "70.3", "unit": "%", "period": "2017年度", "pdfPage": 15},
+      {"text": "IoT与生活消费产品收入占比", "value": "20.5", "unit": "%", "period": "2017年度", "pdfPage": 15},
+      {"text": "互联网服务收入占比", "value": "8.6", "unit": "%", "period": "2017年度", "pdfPage": 15}
+    ], "explanation": "2017年智能手机仍占收入70.3%，互联网服务只有8.6%。所以“互联网公司”的叙事必须和当时的真实收入结构对照，不能只听公司如何描述自己。", "pitfall": "收入占比低不代表利润贡献低；还需要分部毛利和成本信息。", "question": "如果智能手机销量下降，这三项业务可能怎样互相影响？", "referencePoints": ["手机收入会直接承压", "设备用户减少可能拖累IoT协同和互联网服务变现"], "sourceId": "ipo-xiaomi-2018", "reportPeriod": "2017年度", "pageNumbers": [15], "units": ["%"], "estimatedMinutes": 15
+  },
+  {
+    "courseType": "prospectus", "lessonNumber": 7, "company": "京东物流", "title": "一体化供应链不是只送快递", "objective": "区分一体化供应链客户与其他物流服务", "reading": "阅读第9至10页业务网络和第17页收入构成", "facts": [
+      {"text": "一体化供应链客户收入", "value": "55619.685", "unit": "百万元人民币", "period": "2020年度", "pdfPage": 17},
+      {"text": "企业客户数量", "value": "190000+", "unit": "家", "period": "2020年度", "pdfPage": 9},
+      {"text": "亚洲一号大型智能仓库", "value": "32", "unit": "座", "period": "2020年12月31日", "pdfPage": 10}
+    ], "explanation": "京东物流不仅完成末端配送，还把仓储、库存、运输和技术整合给企业客户。网络规模形成服务能力，也带来仓库、人员和设备的固定投入。", "pitfall": "客户数量多不等于客户质量高，应区分收入贡献、留存和客户集中度。", "question": "一体化供应链服务与普通单票快递相比，为什么客户关系可能更深？", "referencePoints": ["嵌入客户库存、仓储和履约流程", "切换服务商的迁移成本通常更高"], "sourceId": "ipo-jdl-2021", "reportPeriod": "2020年度", "pageNumbers": [9, 10, 17], "units": ["百万元人民币", "家", "座"], "estimatedMinutes": 17
+  },
+  {
+    "courseType": "prospectus", "lessonNumber": 8, "company": "京东物流", "title": "增长、客户价值与亏损一起看", "objective": "学习在招股书中同时读取增长指标和盈利风险", "reading": "阅读第11页亏损提示、第17页收入结构和第50页客户指标", "facts": [
+      {"text": "年内亏损", "value": "4000", "unit": "百万元人民币约数", "period": "2020年度", "pdfPage": 11},
+      {"text": "一体化供应链客户收入占比", "value": "75.8", "unit": "%", "period": "2020年度", "pdfPage": 17},
+      {"text": "每名外部一体化供应链客户平均收入", "value": "312617", "unit": "元人民币", "period": "2020年度", "pdfPage": 50}
+    ], "explanation": "一体化供应链客户贡献75.8%的收入，平均客户收入体现服务深度；但公司同期仍亏损约40亿元。增长是否有价值，要看客户经济性最终能否覆盖网络投入。", "pitfall": "收入增长和客户数增长不能自动证明商业模式已经盈利。", "question": "你会用哪三个后续指标判断京东物流的亏损是否正在改善？", "referencePoints": ["毛利率或单位履约利润", "客户留存与单客收入", "经营现金流和资本支出"], "sourceId": "ipo-jdl-2021", "reportPeriod": "2020年度", "pageNumbers": [11, 17, 50], "units": ["百万元人民币约数", "%", "元人民币"], "estimatedMinutes": 18
+  }
+]

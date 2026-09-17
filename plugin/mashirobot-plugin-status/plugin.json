@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "mashirobot-plugin-status",
+  "name": "状态",
+  "version": "1.0.0",
+  "description": "Windows 系统状态与硬件信息图片",
+  "menuIndex": 3,
+  "priority": 240,
+  "enabled": true,
+  "entry": "index.mjs",
+  "exactCommands": ["/状态", "/状态详细", "/硬件信息"]
+}

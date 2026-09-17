@@ -1,0 +1,189 @@
+[
+  {
+    "courseType": "financial_report", "lessonNumber": 1, "company": "伊利股份", "title": "先看懂一份年报的地图", "objective": "知道利润表、资产负债表和现金流量表各回答什么问题", "reading": "阅读主要会计数据表，先只找收入、利润、现金和资产", "facts": [
+      {"text": "营业收入", "value": "115636231250.05", "unit": "元", "period": "2025年度", "pdfPage": 7},
+      {"text": "总资产", "value": "152098516632.34", "unit": "元", "period": "2025年度", "pdfPage": 7}
+    ], "explanation": "收入说明一年卖了多少，利润说明最终留下多少，现金流说明钱是否真的流入，资产负债表则像年末的一张家底照片。先认地图，不必从第一页逐字读到最后。", "pitfall": "营业收入大不代表利润高，也不代表手里现金多。三张表必须互相对照。", "question": "如果只能再查看一个数字来判断收入有没有变成真金白银，你会选哪个？", "referencePoints": ["优先看经营活动现金流量净额", "说明利润和现金并非同一概念"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [7], "units": ["元"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 2, "company": "伊利股份", "title": "收入增长很慢，利润为何增长很快", "objective": "区分收入增速与利润增速", "reading": "阅读第7页近三年主要会计数据", "facts": [
+      {"text": "营业收入同比增长", "value": "0.21", "unit": "%", "period": "2025年度", "pdfPage": 7},
+      {"text": "归母净利润同比增长", "value": "36.82", "unit": "%", "period": "2025年度", "pdfPage": 7}
+    ], "explanation": "收入几乎持平而利润明显增长，说明答案不在销量一个因素里，还要检查产品结构、原料成本、营销费用及非经常性项目。", "pitfall": "不能看到利润增长36.82%就直接推断主营业务全面变强。", "question": "你会继续去管理层讨论中寻找哪两类原因？", "referencePoints": ["成本费用变化", "产品结构和非经常性损益"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [7], "units": ["%"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 3, "company": "伊利股份", "title": "利润增长，经营现金流却下降", "objective": "理解利润与经营现金流可能背离", "reading": "对照第7页净利润和经营活动现金流量净额", "facts": [
+      {"text": "归母净利润", "value": "11565166497.81", "unit": "元", "period": "2025年度", "pdfPage": 7},
+      {"text": "经营活动现金流量净额", "value": "14343920490.32", "unit": "元", "period": "2025年度", "pdfPage": 7}
+    ], "explanation": "利润按权责发生制确认，经营现金流记录实际收付款。现金流仍为正，但同比下降34.02%，值得继续查看预收货款、税费和薪酬等变化。", "pitfall": "一次背离不等于造假；需要结合附注和多年趋势判断。", "question": "为什么已经确认的销售收入可能尚未带来同额现金？", "referencePoints": ["赊销会形成应收账款", "收款和收入确认时间可能不同"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [7], "units": ["元"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 4, "company": "伊利股份", "title": "从产品结构理解乳业", "objective": "用分产品收入识别增长与承压业务", "reading": "阅读第21页收入和成本分析", "facts": [
+      {"text": "液体乳主营业务收入", "value": "704.22", "unit": "亿元", "period": "2025年度", "pdfPage": 21},
+      {"text": "奶粉及奶制品主营业务收入", "value": "327.69", "unit": "亿元", "period": "2025年度", "pdfPage": 21},
+      {"text": "冷饮产品主营业务收入", "value": "98.22", "unit": "亿元", "period": "2025年度", "pdfPage": 21}
+    ], "explanation": "液体乳仍是最大业务但同比下降，奶粉和冷饮增长。分产品看，能解释总收入几乎不变背后其实发生了结构迁移。", "pitfall": "只看公司总收入会掩盖不同产品线方向相反的变化。", "question": "哪项业务规模最大，哪两项业务在2025年增长？", "referencePoints": ["液体乳规模最大", "奶粉及奶制品、冷饮增长"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [21], "units": ["亿元"], "estimatedMinutes": 14
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 5, "company": "伊利股份", "title": "应收账款和存货是被占住的钱", "objective": "认识营运资金中的两个核心科目", "reading": "阅读第82页合并资产负债表流动资产部分", "facts": [
+      {"text": "应收账款", "value": "2987426531.59", "unit": "元", "period": "2025年度", "pdfPage": 82},
+      {"text": "存货", "value": "10823125184.53", "unit": "元", "period": "2025年度", "pdfPage": 82}
+    ], "explanation": "应收账款是货卖出但钱未完全收回，存货是尚未销售或耗用的商品与材料。两者都可能占用现金，也可能因业务扩张而合理增加。", "pitfall": "应收和存货上升并非自动等于经营恶化，要与收入增速、周转率和减值结合。", "question": "对保质期有限的乳制品企业，你会更警惕应收账款还是存货，为什么？", "referencePoints": ["存货存在过期和减值风险", "也要结合经销商回款质量"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [82], "units": ["元"], "estimatedMinutes": 14
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 6, "company": "伊利股份", "title": "研发投入要放回行业里看", "objective": "学会读取研发金额、比例和人员", "reading": "阅读第25页研发投入情况表", "facts": [
+      {"text": "研发投入合计", "value": "915007208.81", "unit": "元", "period": "2025年度", "pdfPage": 25},
+      {"text": "研发投入占营业收入比例", "value": "0.79", "unit": "%", "period": "2025年度", "pdfPage": 25},
+      {"text": "研发人员数量", "value": "643", "unit": "人", "period": "2025年度", "pdfPage": 25}
+    ], "explanation": "研发金额要同时看收入占比、费用化或资本化方式及产出。食品企业的研发强度不能直接和软件或制药企业横比。", "pitfall": "研发投入越高并不必然越好，也不能只因比例低就断言公司不创新。", "question": "为什么研发占比必须与同行业公司比较？", "referencePoints": ["行业技术和资产结构不同", "会计处理与商业模式不同"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [25], "units": ["元", "%", "人"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 7, "company": "伊利股份", "title": "用收入和成本读产品盈利空间", "objective": "理解收入减成本与毛利的关系", "reading": "阅读第21页液体乳和奶粉的收入成本说明", "facts": [
+      {"text": "液体乳主营业务成本", "value": "482.88", "unit": "亿元", "period": "2025年度", "pdfPage": 21},
+      {"text": "奶粉及奶制品主营业务成本", "value": "191.45", "unit": "亿元", "period": "2025年度", "pdfPage": 21}
+    ], "explanation": "把每类产品收入减去对应主营业务成本，可得到该类业务的毛利基础。之后还要扣销售、管理、研发等期间费用才接近营业利润。", "pitfall": "毛利不是净利润；广告、渠道、管理和税费还没有扣除。", "question": "奶粉收入327.69亿元、成本191.45亿元，收入减成本是多少？", "referencePoints": ["约136.24亿元", "这是毛利基础而非最终净利润"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [21], "units": ["亿元"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 8, "company": "伊利股份", "title": "给伊利做一页小结", "objective": "练习把增长、结构和现金放在一句判断里", "reading": "复看第7页和第21页，写三句话小结", "facts": [
+      {"text": "扣非归母净利润同比增长", "value": "84.13", "unit": "%", "period": "2025年度", "pdfPage": 7},
+      {"text": "经营活动现金流量净额同比变化", "value": "-34.02", "unit": "%", "period": "2025年度", "pdfPage": 7}
+    ], "explanation": "一个谨慎的小结应同时说：总收入近乎持平；奶粉和冷饮增长、液体乳下降；利润增长但经营现金流同比下降，需要继续验证增长质量。", "pitfall": "小结不是给公司贴“好”或“坏”的标签，而是指出已知事实和待验证问题。", "question": "请用不超过80字总结伊利2025年的收入、利润和现金流。", "referencePoints": ["事实与解释分开", "至少提到收入、利润、现金流三项"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [7, 21], "units": ["%"], "estimatedMinutes": 15
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 9, "company": "美的集团", "title": "家电巨头的三项总览数字", "objective": "建立收入、利润、现金流的第一印象", "reading": "阅读第9页主要会计数据", "facts": [
+      {"text": "营业收入", "value": "456451731", "unit": "千元", "period": "2025年度", "pdfPage": 9},
+      {"text": "归母净利润", "value": "43945411", "unit": "千元", "period": "2025年度", "pdfPage": 9},
+      {"text": "经营活动现金流量净额", "value": "53345930", "unit": "千元", "period": "2025年度", "pdfPage": 9}
+    ], "explanation": "美的收入同比增长12.11%、归母净利润增长14.03%，经营现金流则下降11.84%。增长和现金变化并不总同向。", "pitfall": "注意表头单位是千元，不能把456451731读成4564亿元之外的数量级。", "question": "利润增长而经营现金流下降时，你最先想到检查哪些科目？", "referencePoints": ["应收、存货、预付款", "合同负债和应付款"], "sourceId": "annual-midea-2025", "reportPeriod": "2025年度", "pageNumbers": [9], "units": ["千元"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 10, "company": "美的集团", "title": "美的不只是家电公司", "objective": "从业务分部识别ToC与ToB结构", "reading": "阅读第49页分产品收入构成", "facts": [
+      {"text": "智能家居业务收入", "value": "299927239", "unit": "千元", "period": "2025年度", "pdfPage": 49},
+      {"text": "商业及工业解决方案收入", "value": "122752958", "unit": "千元", "period": "2025年度", "pdfPage": 49}
+    ], "explanation": "智能家居仍贡献约三分之二收入，商业及工业解决方案约四分之一。分部结构能告诉你公司的增长来源与风险不再只来自家电零售。", "pitfall": "业务名称听起来先进，不代表利润率一定更高；还要看收入、成本和增长。", "question": "哪一块是收入基本盘，哪一块更像第二增长曲线？", "referencePoints": ["智能家居是基本盘", "商业及工业解决方案是第二曲线"], "sourceId": "annual-midea-2025", "reportPeriod": "2025年度", "pageNumbers": [49], "units": ["千元"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 11, "company": "美的集团", "title": "国内与海外收入怎么读", "objective": "理解地域结构和全球化暴露", "reading": "阅读第50页分地区收入", "facts": [
+      {"text": "国内收入", "value": "260504038", "unit": "千元", "period": "2025年度", "pdfPage": 50},
+      {"text": "海外收入", "value": "195947693", "unit": "千元", "period": "2025年度", "pdfPage": 50}
+    ], "explanation": "海外收入占42.93%且增长15.92%，说明汇率、关税、海外供应链与本地化经营都会显著影响公司。地域结构也是风险结构。", "pitfall": "海外收入增长不等于汇兑收益，也不等于所有国家都增长。", "question": "海外收入占比较高会带来哪两类新增风险？", "referencePoints": ["汇率与关税", "地缘政治和当地合规"], "sourceId": "annual-midea-2025", "reportPeriod": "2025年度", "pageNumbers": [50], "units": ["千元"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 12, "company": "美的集团", "title": "规模增长不等于毛利率上升", "objective": "比较不同业务毛利率", "reading": "阅读第50页收入成本和毛利率表", "facts": [
+      {"text": "智能家居业务毛利率", "value": "29.90", "unit": "%", "period": "2025年度", "pdfPage": 50},
+      {"text": "商业及工业解决方案毛利率", "value": "20.81", "unit": "%", "period": "2025年度", "pdfPage": 50}
+    ], "explanation": "两项业务都增长，但毛利率水平不同，且同比变化很小。判断增长质量时要看增长是否靠更低价格或更高成本换来。", "pitfall": "毛利率高低不能脱离业务性质判断，服务、设备和消费品的成本结构不同。", "question": "如果低毛利业务占比持续上升，对集团整体毛利率可能有什么影响？", "referencePoints": ["可能稀释集团毛利率", "也要看各分部自身改善"], "sourceId": "annual-midea-2025", "reportPeriod": "2025年度", "pageNumbers": [50], "units": ["%"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 13, "company": "美的集团", "title": "现金流下降是否危险", "objective": "用绝对值和同比同时判断现金流", "reading": "复看第9页经营现金流和净利润", "facts": [
+      {"text": "经营活动现金流量净额同比变化", "value": "-11.84", "unit": "%", "period": "2025年度", "pdfPage": 9},
+      {"text": "归母净利润同比变化", "value": "14.03", "unit": "%", "period": "2025年度", "pdfPage": 9}
+    ], "explanation": "经营现金流绝对额仍高于归母净利润，但同比下降。结论应是需要追踪营运资金变化，而不是仅凭下降就判定危险。", "pitfall": "百分比下降会忽略基数和绝对金额；两者必须一起看。", "question": "为什么这里不能只写“现金流变差”？", "referencePoints": ["绝对额仍为正且较大", "需查下降原因和持续性"], "sourceId": "annual-midea-2025", "reportPeriod": "2025年度", "pageNumbers": [9], "units": ["%"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 14, "company": "美的集团", "title": "研发投入与制造业转型", "objective": "把研发金额与研发队伍联系起来", "reading": "阅读第44页全球研发能力", "facts": [
+      {"text": "研发投入", "value": "178", "unit": "亿元", "period": "2025年度", "pdfPage": 44},
+      {"text": "全球研发人员", "value": "23000+", "unit": "人", "period": "2025年度", "pdfPage": 44}
+    ], "explanation": "研发投入同比增长9.6%，并由全球研发网络和人员承接。金额说明资源配置，但长期效果仍要从产品、专利和盈利能力验证。", "pitfall": "把研发投入直接当作当期利润来源，会混淆投入与产出。", "question": "除了投入金额，你还会用什么结果指标观察研发效果？", "referencePoints": ["新产品收入或毛利", "专利质量、研发周期或客户采用"], "sourceId": "annual-midea-2025", "reportPeriod": "2025年度", "pageNumbers": [44], "units": ["亿元", "人"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 15, "company": "美的集团", "title": "用资产结构提出问题", "objective": "从应收和存货占比寻找后续阅读方向", "reading": "阅读第54页主要资产重大变化", "facts": [
+      {"text": "应收账款", "value": "40450097", "unit": "千元", "period": "2025年度", "pdfPage": 54},
+      {"text": "存货", "value": "64628834", "unit": "千元", "period": "2025年度", "pdfPage": 54}
+    ], "explanation": "应收账款占总资产6.64%，存货占10.62%。下一步应比较其增速与收入增速，并查看周转和减值，而不是停在金额大小。", "pitfall": "大公司的绝对金额天然很大，更有意义的是占比、增速和周转。", "question": "应收账款增长快于收入时，可能意味着什么？", "referencePoints": ["回款变慢或信用政策放宽", "也可能是业务结构变化"], "sourceId": "annual-midea-2025", "reportPeriod": "2025年度", "pageNumbers": [54], "units": ["千元"], "estimatedMinutes": 14
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 16, "company": "顺丰控股", "title": "物流公司的收入和利润薄在哪里", "objective": "认识高收入、低净利率的物流模式", "reading": "阅读第14至15页主要指标", "facts": [
+      {"text": "营业收入", "value": "308226647", "unit": "千元", "period": "2025年度", "pdfPage": 14},
+      {"text": "归母净利润", "value": "11117216", "unit": "千元", "period": "2025年度", "pdfPage": 14}
+    ], "explanation": "顺丰收入超过3082亿元，归母净利润约111亿元，归母净利率仅3.61%。物流需要大量人员、运输和场地，利润率天然不能只和互联网公司横比。", "pitfall": "净利率低不自动代表商业模式差，关键是周转、现金流和资本效率。", "question": "物流企业净利率不高时，你会补看哪两个指标？", "referencePoints": ["经营现金流", "资产周转或投入资本回报"], "sourceId": "annual-sf-2025", "reportPeriod": "2025年度", "pageNumbers": [14, 15], "units": ["千元"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 17, "company": "顺丰控股", "title": "时效、经济、国际：收入从哪里来", "objective": "看懂物流业务组合", "reading": "阅读第12页分业务板块收入图", "facts": [
+      {"text": "时效快递收入", "value": "1310.5", "unit": "亿元", "period": "2025年度", "pdfPage": 12},
+      {"text": "供应链及国际收入", "value": "729.4", "unit": "亿元", "period": "2025年度", "pdfPage": 12},
+      {"text": "经济快递收入", "value": "421.3", "unit": "亿元", "period": "2025年度", "pdfPage": 12}
+    ], "explanation": "时效快递是最大收入来源，供应链及国际是第二大板块。业务组合决定价格、成本、网络利用率和周期暴露。", "pitfall": "不同物流产品的收入不能简单相加后就认为盈利贡献同等。", "question": "哪一项是顺丰的基本盘，哪一项更直接暴露于国际货运价格？", "referencePoints": ["时效快递是基本盘", "供应链及国际更受国际货运影响"], "sourceId": "annual-sf-2025", "reportPeriod": "2025年度", "pageNumbers": [12], "units": ["亿元"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 18, "company": "顺丰控股", "title": "件量增长为何不等于利润同比增长", "objective": "理解量、价、成本的共同作用", "reading": "阅读第12页总件量与收入", "facts": [
+      {"text": "总件量", "value": "167.2", "unit": "亿票", "period": "2025年度", "pdfPage": 12},
+      {"text": "总件量同比增长", "value": "25.4", "unit": "%", "period": "2025年度", "pdfPage": 12}
+    ], "explanation": "件量增长25.4%，收入只增长8.37%，提示业务结构或票均收入发生变化。更多包裹不一定按相同比例增加利润。", "pitfall": "用件量增速直接预测收入或利润，会忽略单票价格和边际成本。", "question": "件量增速明显高于收入增速，最可能需要检查哪个价格指标？", "referencePoints": ["票均收入", "不同产品件量占比"], "sourceId": "annual-sf-2025", "reportPeriod": "2025年度", "pageNumbers": [12], "units": ["亿票", "%"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 19, "company": "顺丰控股", "title": "毛利率与净利率之间隔着什么", "objective": "区分毛利率、净利率和费用", "reading": "阅读第15页主要财务指标", "facts": [
+      {"text": "毛利率", "value": "13.32", "unit": "%", "period": "2025年度", "pdfPage": 15},
+      {"text": "归母净利率", "value": "3.61", "unit": "%", "period": "2025年度", "pdfPage": 15}
+    ], "explanation": "从13.32%的毛利率到3.61%的归母净利率，中间还要扣销售、管理、研发、财务、税费等项目。这个差距展示了经营体系的成本。", "pitfall": "毛利率下降0.61个百分点不等同于净利润同比下降。", "question": "请列出毛利之后至少三类会影响净利润的项目。", "referencePoints": ["销售、管理、研发费用", "财务费用、税费及其他损益"], "sourceId": "annual-sf-2025", "reportPeriod": "2025年度", "pageNumbers": [15], "units": ["%"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 20, "company": "顺丰控股", "title": "物流企业为何重视自由现金流", "objective": "从经营现金流扣除资本支出理解可支配现金", "reading": "阅读第15页现金流与自由现金流", "facts": [
+      {"text": "经营活动现金流量净额", "value": "27555275", "unit": "千元", "period": "2025年度", "pdfPage": 15},
+      {"text": "自由现金流", "value": "17933348", "unit": "千元", "period": "2025年度", "pdfPage": 15}
+    ], "explanation": "物流网络需要车辆、仓库和设备投入。报告把自由现金流定义为经营现金流减去不含股权投资的资本支出，更接近可用于还债、分红或再投资的钱。", "pitfall": "不同公司对自由现金流定义可能不同，比较前必须先看脚注。", "question": "为什么经营现金流为正，自由现金流仍可能很小甚至为负？", "referencePoints": ["资本支出较大", "扩建网络会消耗现金"], "sourceId": "annual-sf-2025", "reportPeriod": "2025年度", "pageNumbers": [15], "units": ["千元"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 21, "company": "顺丰控股", "title": "资产负债率下降意味着什么", "objective": "用资产、负债和权益认识财务结构", "reading": "阅读第14至15页资产负债数据", "facts": [
+      {"text": "总负债", "value": "106144286", "unit": "千元", "period": "2025年度", "pdfPage": 14},
+      {"text": "资产负债率", "value": "49.03", "unit": "%", "period": "2025年度", "pdfPage": 15}
+    ], "explanation": "资产负债率从52.14%降至49.03%，说明负债占资产比例下降，但还需区分有息债务、经营性应付款和租赁负债。", "pitfall": "资产负债率越低不一定越好，过低也可能说明公司没有有效利用融资。", "question": "为什么同为负债，银行借款和应付供应商款项需要分开看？", "referencePoints": ["利息成本不同", "到期结构和经营含义不同"], "sourceId": "annual-sf-2025", "reportPeriod": "2025年度", "pageNumbers": [14, 15], "units": ["千元", "%"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 22, "company": "顺丰控股", "title": "研发费用下降先别急着下结论", "objective": "区分费用化研发、资本化研发与效率变化", "reading": "阅读第64页费用和研发投入说明", "facts": [
+      {"text": "研发费用", "value": "2169906", "unit": "千元", "period": "2025年度", "pdfPage": 64},
+      {"text": "研发费用同比变化", "value": "-14.36", "unit": "%", "period": "2025年度", "pdfPage": 64}
+    ], "explanation": "报告解释研发费用下降与研发效率提高、可资本化项目增加有关。因此费用下降不一定等于研发活动同比减少。", "pitfall": "只看利润表研发费用会漏掉被资本化的开发投入。", "question": "研发资本化为什么会让当期费用和利润看起来不同？", "referencePoints": ["资本化金额先形成资产", "以后通过摊销影响利润"], "sourceId": "annual-sf-2025", "reportPeriod": "2025年度", "pageNumbers": [64], "units": ["千元", "%"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 23, "company": "腾讯控股", "title": "互联网平台的收入和利润", "objective": "认识港股年报中的百万人民币口径", "reading": "阅读第8页综合收益数据", "facts": [
+      {"text": "收入", "value": "751766", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 8},
+      {"text": "本公司权益持有人应占盈利", "value": "224842", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 8}
+    ], "explanation": "腾讯收入约7518亿元、权益持有人应占盈利约2248亿元，利润率结构与物流、制造企业显著不同。先确认单位，再做跨公司比较。", "pitfall": "港股表格的“百万元”容易被读成“万元”或“亿元”。", "question": "把751766百万元人民币换算成亿元是多少？", "referencePoints": ["7517.66亿元", "先除以100"], "sourceId": "annual-tencent-2025", "reportPeriod": "2025年度", "pageNumbers": [8], "units": ["百万元人民币"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 24, "company": "腾讯控股", "title": "三大收入支柱", "objective": "理解增值服务、营销服务和金融科技及企业服务", "reading": "阅读第9页分部收入表", "facts": [
+      {"text": "增值服务收入", "value": "369281", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 9},
+      {"text": "营销服务收入", "value": "144973", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 9},
+      {"text": "金融科技及企业服务收入", "value": "229435", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 9}
+    ], "explanation": "增值服务占49%，营销服务占19%，金融科技及企业服务占31%。不同分部的增长和毛利率共同决定集团表现。", "pitfall": "不要把微信用户数量直接等同于某一个分部收入。", "question": "三项业务中哪项规模最大，哪项2025年增速最快？", "referencePoints": ["增值服务规模最大", "营销服务同比增长19%最快"], "sourceId": "annual-tencent-2025", "reportPeriod": "2025年度", "pageNumbers": [9], "units": ["百万元人民币"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 25, "company": "腾讯控股", "title": "平台公司的毛利率提升", "objective": "理解收入结构与成本效率如何影响毛利", "reading": "阅读第10页分部毛利和毛利率", "facts": [
+      {"text": "集团毛利", "value": "422593", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 10},
+      {"text": "集团毛利率", "value": "56", "unit": "%", "period": "2025年度", "pdfPage": 10}
+    ], "explanation": "集团毛利同比增长21%，毛利率由53%升至56%。要继续判断是高毛利业务占比上升、单项业务效率改善，还是两者共同作用。", "pitfall": "毛利率提升不等于净利率同比提升相同幅度。", "question": "收入增长14%、毛利增长21%说明了什么方向？", "referencePoints": ["毛利增速高于收入", "整体毛利率提升"], "sourceId": "annual-tencent-2025", "reportPeriod": "2025年度", "pageNumbers": [10], "units": ["百万元人民币", "%"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 26, "company": "腾讯控股", "title": "用户指标不是财务指标，但能解释财务", "objective": "把运营指标与商业化联系起来", "reading": "阅读第5页主要运营数据", "facts": [
+      {"text": "微信及WeChat合并月活跃账户", "value": "1418", "unit": "百万", "period": "2025年度", "pdfPage": 5},
+      {"text": "收费增值服务注册账户", "value": "267", "unit": "百万", "period": "2025年度", "pdfPage": 5}
+    ], "explanation": "月活账户展示平台覆盖，付费账户更接近直接变现。运营数据要和人均收入、广告加载、付费率等指标组合看。", "pitfall": "账户数不等于自然人数，也不能直接当成收入。", "question": "为什么月活账户增长2%时，收入仍可能增长14%？", "referencePoints": ["单用户变现提高", "广告、游戏或企业服务增长"], "sourceId": "annual-tencent-2025", "reportPeriod": "2025年度", "pageNumbers": [5], "units": ["百万"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 27, "company": "腾讯控股", "title": "平台公司的资产家底", "objective": "认识总资产和股东权益", "reading": "阅读第4页财务概要", "facts": [
+      {"text": "资产总额", "value": "2038986", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 4},
+      {"text": "本公司权益持有人应占权益", "value": "1154152", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 4}
+    ], "explanation": "资产总额约2.04万亿元，归属于腾讯权益持有人的权益约1.15万亿元。资产中还包含投资、无形资产和金融资产，性质与工厂设备不同。", "pitfall": "总资产大不等于都能立即变现，也不等于全部属于普通股股东。", "question": "互联网公司的资产结构为什么可能比制造业更难只凭账面金额理解？", "referencePoints": ["无形资产和投资较多", "公允价值及商业价值可能波动"], "sourceId": "annual-tencent-2025", "reportPeriod": "2025年度", "pageNumbers": [4], "units": ["百万元人民币"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 28, "company": "腾讯控股", "title": "经营产生现金与经营净现金", "objective": "识别税款和营运资金对现金流的影响", "reading": "阅读第139页综合现金流量表", "facts": [
+      {"text": "经营活动产生的现金", "value": "347751", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 139},
+      {"text": "经营活动所得现金流量净额", "value": "303052", "unit": "百万元人民币", "period": "2025年度", "pdfPage": 139}
+    ], "explanation": "经营活动产生现金后，还要考虑已付所得税等项目，才得到经营活动净现金流。看表时要顺着小计往下读。", "pitfall": "看到第一个经营现金数字就停下，可能把税前现金误当成最终经营净现金。", "question": "这两个数字相差约447亿元，表中最应继续查看哪类项目？", "referencePoints": ["已付所得税", "营运资金和其他经营支付"], "sourceId": "annual-tencent-2025", "reportPeriod": "2025年度", "pageNumbers": [139], "units": ["百万元人民币"], "estimatedMinutes": 13
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 29, "company": "腾讯控股", "title": "年度数字背后的第四季度", "objective": "理解全年结果可能掩盖季度变化", "reading": "阅读第12页截至12月31日止三个月数据", "facts": [
+      {"text": "第四季度收入", "value": "194371", "unit": "百万元人民币", "period": "截至2025年12月31日止三个月", "pdfPage": 12},
+      {"text": "第四季度本公司权益持有人应占盈利", "value": "58260", "unit": "百万元人民币", "period": "截至2025年12月31日止三个月", "pdfPage": 12}
+    ], "explanation": "全年表告诉你总结果，季度表更能观察最近变化。这两个数字的期间均为截至2025年12月31日止三个月，不能与全年数字混用。", "pitfall": "不能把单季度收入与全年利润直接比较，期间必须一致。", "question": "为什么分析公司现状时要同时看全年和最近一个季度？", "referencePoints": ["全年更稳定", "最近季度更及时但波动更大"], "sourceId": "annual-tencent-2025", "reportPeriod": "截至2025年12月31日止三个月", "pageNumbers": [12], "units": ["百万元人民币"], "estimatedMinutes": 12
+  },
+  {
+    "courseType": "financial_report", "lessonNumber": 30, "company": "四家公司", "title": "四种商业模式的横向比较", "objective": "在统一单位后比较规模，并理解利润率不可脱离商业模式", "reading": "对照四份年报的主要会计数据页", "facts": [
+      {"text": "伊利营业收入", "value": "1156.36", "unit": "亿元人民币", "period": "2025年度", "pdfPage": 7, "sourceId": "annual-yili-2025"},
+      {"text": "美的营业收入", "value": "4564.52", "unit": "亿元人民币", "period": "2025年度", "pdfPage": 9, "sourceId": "annual-midea-2025"},
+      {"text": "顺丰营业收入", "value": "3082.27", "unit": "亿元人民币", "period": "2025年度", "pdfPage": 14, "sourceId": "annual-sf-2025"},
+      {"text": "腾讯收入", "value": "7517.66", "unit": "亿元人民币", "period": "2025年度", "pdfPage": 8, "sourceId": "annual-tencent-2025"}
+    ], "explanation": "统一到亿元后，腾讯收入规模最大，但比较的重点不是排座次。乳业看产品与渠道，家电看制造和全球化，物流看网络与周转，互联网看用户与高毛利服务。", "pitfall": "跨行业直接比较净利率并给公司排名，会忽略资本强度、周转速度和收入确认方式。", "question": "四家公司中任选两家，说出为什么不能只凭净利率判断谁更优秀。", "referencePoints": ["指出商业模式差异", "至少提到资本强度、周转或收入结构之一"], "sourceId": "annual-yili-2025", "reportPeriod": "2025年度", "pageNumbers": [7, 8, 9, 14], "units": ["亿元人民币"], "estimatedMinutes": 18
+  }
+]

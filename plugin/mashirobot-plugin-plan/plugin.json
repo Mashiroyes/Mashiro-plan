@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "mashirobot-plugin-plan",
+  "name": "计划",
+  "version": "1.1.0",
+  "description": "计划、记录、英语四项能力统计、作息与提醒",
+  "menuIndex": 1,
+  "priority": 100,
+  "enabled": true,
+  "entry": "index.mjs",
+  "exactCommands": [
+    "/计划",
+    "/计划详细"
+  ]
+}
