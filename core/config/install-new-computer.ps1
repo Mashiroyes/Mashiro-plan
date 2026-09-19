@@ -10,6 +10,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 $planRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $SqlitePath) { $SqlitePath = Join-Path $planRoot 'sqlite\openclaw-planner.sqlite' }
 $SqlitePath = [IO.Path]::GetFullPath($SqlitePath)
