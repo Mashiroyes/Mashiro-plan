@@ -348,10 +348,10 @@ function Invoke-RunWakeup {
     . (Join-Path $PSScriptRoot 'wakeup-common.ps1')
     . (Join-Path $PSScriptRoot 'cloudmusic-playback.ps1')
 
-    $cloudMusicPath = 'D:\Program\CloudMusic\cloudmusic.exe'
-    $openClawCmd = 'D:\Program\nodejs\npm_global24\openclaw.cmd'
-    $weixinAccount = 'ea8fd13b2100-im-bot'
-    $weixinTarget = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'
+    $delivery = Get-MashiroDeliveryConfig
+    $machineModule = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
+    Import-Module $machineModule -Force
+    $cloudMusicPath = Resolve-MashiroCloudMusicPath
     $reminderText = '真白，该起床啦。起来后回复“已起床”。'
     $state = Read-WakeupState
     if ($null -eq $state -or -not [bool]$state.active -or [string]$state.windowsTaskName -ne $TaskName) {
@@ -364,8 +364,7 @@ function Invoke-RunWakeup {
         $state.triggeredAt = $now.ToString('o'); $state.updatedAt = $now.ToString('o'); Write-WakeupState -State $state
         if ($DryRun) {
             Initialize-MasterVolumeType
-            if (-not (Test-Path -LiteralPath $cloudMusicPath)) { throw "CloudMusic executable not found: $cloudMusicPath" }
-            if (-not (Test-Path -LiteralPath $openClawCmd)) { throw "OpenClaw command not found: $openClawCmd" }
+            if (-not $cloudMusicPath) { throw 'CloudMusic executable is not configured. Set cloudMusicPath in machine.json.' }
             Write-WakeupLog 'DRY RUN: volume API compiled; CloudMusic and OpenClaw paths verified.'
         } else {
             try { Initialize-MasterVolumeType; [OpenClawAudio.MasterVolume]::SetMaximum(); Write-WakeupLog 'Master volume set to 100%.' }
@@ -387,7 +386,7 @@ function Invoke-RunWakeup {
     try {
         if ($DryRun) { Write-WakeupLog 'DRY RUN: would send Weixin wakeup reminder.' }
         else {
-            $sendOutput = & $openClawCmd message send --json --channel 'openclaw-weixin' --account $weixinAccount --target $weixinTarget --message $reminderText 2>&1
+            $sendOutput = & $delivery.OpenClawCommand message send --json --channel 'openclaw-weixin' --account $delivery.Account --target $delivery.Target --message $reminderText 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($sendOutput -join [Environment]::NewLine) }
             Write-WakeupLog 'Weixin wakeup reminder sent.'
         }

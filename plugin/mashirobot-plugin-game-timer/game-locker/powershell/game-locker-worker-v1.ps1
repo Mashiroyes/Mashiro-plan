@@ -9,12 +9,13 @@ $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
 $OutputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=$OutputEncoding
 $helper=Join-Path $PSScriptRoot 'game-locker-db-v1.mjs';$vaultRoot=Join-Path $StateRoot 'vault'
 $clock=if($Now){[DateTimeOffset]::Parse($Now).ToUniversalTime()}else{[DateTimeOffset]::UtcNow}
+$MachineModule=Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
 $taskPrefix='MashiroBot-GameLocker-Restore-';$mainTask='MashiroBot-GameLocker-Reconcile'
 function B64($v){[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($v|ConvertTo-Json -Depth 10 -Compress)))}
 function Db($command,$payload=$null){$args=@($helper,$command,$SqlitePath);if($null-ne$payload){$args+=B64 $payload};$raw=& node @args 2>&1;if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)};if($raw){($raw-join'')|ConvertFrom-Json -DateKind String}}
 function Update($row,$values){$values.updated_at=$clock.ToString('o');[void](Db 'update64' @{id=$row.id;values=$values})}
 function Log($message){$dir=Join-Path $StateRoot 'logs';New-Item -ItemType Directory -Path $dir -Force|Out-Null;[IO.File]::AppendAllText((Join-Path $dir 'game-locker.log'),("{0} {1}`r`n"-f[DateTimeOffset]::Now.ToString('o'),$message),[Text.UTF8Encoding]::new($false))}
-function Notify($message){if($FixtureMode){return};try{& 'D:\Program\nodejs\npm_global24\openclaw.ps1' message send --json --channel openclaw-weixin --account 'ea8fd13b2100-im-bot' --target 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat' --message $message|Out-Null}catch{Log("notify failed: $($_.Exception.Message)")}}
+function Notify($message){if($FixtureMode){return};try{if(-not(Test-Path -LiteralPath $MachineModule -PathType Leaf)){throw "MashiroBot machine configuration helper is missing: $MachineModule"};Import-Module $MachineModule -Force;$delivery=Resolve-MashiroWeixinDelivery;& $delivery.OpenClawCommand message send --json --channel openclaw-weixin --account $delivery.Account --target $delivery.Target --message $message|Out-Null}catch{Log("notify failed: $($_.Exception.Message)")}}
 function Exact-ProcessExists($path){$full=[IO.Path]::GetFullPath($path);@((Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)|Where-Object{$_.ExecutablePath-and[string]::Equals([IO.Path]::GetFullPath([string]$_.ExecutablePath),$full,[StringComparison]::OrdinalIgnoreCase)}).Count-gt 0}
 function Valid-Source($path){if([IO.Path]::GetExtension($path) -ine '.exe'){throw 'Only .exe files can be protected.'};$item=Get-Item -LiteralPath $path -Force;if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Reparse points are not allowed.'};if(Exact-ProcessExists $path){throw 'Target executable is still running.'};$item}
 function Register-Restore($row,$due){

@@ -10,6 +10,8 @@ Set-StrictMode -Version Latest
 
 $AdapterRoot = $PSScriptRoot
 $CanonicalAdapterPath = Join-Path $AdapterRoot 'fast-routine.adapter.js'
+$PlanRoot = Split-Path -Parent (Split-Path -Parent $AdapterRoot)
+$IndexPath = Join-Path $PlanRoot 'core\index.mjs'
 $FastRelativePath = 'dist\src\messaging\fast-routine.js'
 $ProcessRelativePath = 'dist\src\messaging\process-message.js'
 
@@ -81,6 +83,7 @@ function Get-FastAdapterState {
     $HasKnownExport = $Text -match '(?m)^\s*export\s+function\s+handleFastRoutineCommand\s*\('
     $HasKnownBridge = $Text -match 'plan/script/bridge/openclaw-router\.mjs'
     if ($HasKnownExport -and $HasKnownBridge) { return 'KnownOld' }
+    if ($Text -match 'handleMashiroBotMessage\s+as\s+handleFastRoutineCommand' -and $Text -match 'core/index\.mjs') { return 'KnownOld' }
 
     throw 'Unknown fast-routine.js layout: neither canonical adapter nor known legacy markers were found.'
 }
@@ -122,7 +125,11 @@ try {
         }
     }
 
-    $CanonicalText = Get-Content -LiteralPath $CanonicalAdapterPath -Raw -Encoding utf8
+    if (-not (Test-Path -LiteralPath $IndexPath -PathType Leaf)) { throw "MashiroBot entry is missing: $IndexPath" }
+    $IndexUri = ([Uri]([IO.Path]::GetFullPath($IndexPath))).AbsoluteUri
+    $CanonicalTemplate = Get-Content -LiteralPath $CanonicalAdapterPath -Raw -Encoding utf8
+    if ($CanonicalTemplate -notmatch '__MASHIROBOT_INDEX_URI__') { throw 'Canonical adapter template is missing its index URI placeholder.' }
+    $CanonicalText = $CanonicalTemplate.Replace('__MASHIROBOT_INDEX_URI__', $IndexUri)
     $FastText = Get-Content -LiteralPath $FastPath -Raw -Encoding utf8
     $ProcessText = Get-Content -LiteralPath $ProcessPath -Raw -Encoding utf8
     $FastState = Get-FastAdapterState -Text $FastText -CanonicalText $CanonicalText

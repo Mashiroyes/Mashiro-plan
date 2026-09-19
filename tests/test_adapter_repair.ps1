@@ -8,6 +8,7 @@ $PlanRoot = Split-Path -Parent $PSScriptRoot
 $AdapterRoot = Join-Path $PlanRoot 'core\adapter'
 $RepairScript = Join-Path $AdapterRoot 'repair-openclaw-adapter.ps1'
 $CanonicalAdapter = Join-Path $AdapterRoot 'fast-routine.adapter.js'
+$IndexUri = ([Uri](Join-Path $PlanRoot 'core\index.mjs')).AbsoluteUri
 $GatewayWrapper = Join-Path $AdapterRoot 'start-openclaw-gateway.ps1'
 $HealthScript = Join-Path $PlanRoot 'core\health\check-mashirobot.ps1'
 
@@ -71,7 +72,7 @@ export function process(rawBody) {
             Set-Content -LiteralPath (Join-Path $Messaging 'process-message.js') -Value $ProcessOld -Encoding utf8 -NoNewline
         }
         'Canonical' {
-            Copy-Item -LiteralPath $CanonicalAdapter -Destination (Join-Path $Messaging 'fast-routine.js')
+            Set-Content -LiteralPath (Join-Path $Messaging 'fast-routine.js') -Value $script:GeneratedCanonicalText -Encoding utf8 -NoNewline
             Set-Content -LiteralPath (Join-Path $Messaging 'process-message.js') -Value $ProcessNew -Encoding utf8 -NoNewline
         }
         'UnknownFast' {
@@ -100,8 +101,9 @@ Assert-True (Test-Path -LiteralPath $GatewayWrapper -PathType Leaf) 'gateway wra
 Assert-True (Test-Path -LiteralPath $HealthScript -PathType Leaf) 'health script must exist'
 
 $CanonicalText = Get-Content -LiteralPath $CanonicalAdapter -Raw -Encoding utf8
+$script:GeneratedCanonicalText = $CanonicalText.Replace('__MASHIROBOT_INDEX_URI__', $IndexUri)
 Assert-True ($CanonicalText -match 'handleMashiroBotMessage as handleFastRoutineCommand') 'canonical adapter must export the MashiroBot handler'
-Assert-True ($CanonicalText -match 'plan/core/index\.mjs') 'canonical adapter must point at plan/core/index.mjs'
+Assert-True ($CanonicalText -match '__MASHIROBOT_INDEX_URI__') 'canonical adapter must use the generated index URI placeholder'
 
 $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("MashiroBotAdapterTest-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $TempRoot | Out-Null
@@ -127,7 +129,7 @@ try {
     $KnownMessaging = New-FakePackage -Root $KnownRoot -Layout KnownOld
     & $RepairScript -PackageRoot $KnownRoot | Out-Null
     Assert-Equal 0 $LASTEXITCODE 'known old layout must repair successfully'
-    Assert-Equal $CanonicalText (Get-Content -LiteralPath (Join-Path $KnownMessaging 'fast-routine.js') -Raw -Encoding utf8) 'installed fast adapter must match canonical file exactly'
+    Assert-Equal $script:GeneratedCanonicalText (Get-Content -LiteralPath (Join-Path $KnownMessaging 'fast-routine.js') -Raw -Encoding utf8) 'installed fast adapter must point at the current checkout'
     $PatchedProcess = Get-Content -LiteralPath (Join-Path $KnownMessaging 'process-message.js') -Raw -Encoding utf8
     Assert-True ($PatchedProcess -match 'accountId: deps\.accountId') 'patched call must pass accountId'
     Assert-True ($PatchedProcess -match 'conversationId: full\.from_user_id \?\? ctx\.To \?\? ""') 'patched call must pass conversationId'

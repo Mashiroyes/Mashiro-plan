@@ -10,12 +10,7 @@ $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('mashiro-finance-worker-' + [g
 try {
     $commonPath = Join-Path $pluginRoot 'windows\common.ps1'
     $commonSource = Get-Content -Raw -Encoding UTF8 $commonPath
-    if ($commonSource -notmatch [regex]::Escape('openclaw.ps1')) {
-        throw 'ordinary WeChat delivery must use openclaw.ps1'
-    }
-    if ($commonSource -match '&\s*\$script:OpenClawCmd\s+message\s+send') {
-        throw 'ordinary WeChat delivery still uses openclaw.cmd'
-    }
+    if ($commonSource -notmatch 'Resolve-MashiroWeixinDelivery') { throw 'ordinary WeChat delivery must use machine configuration' }
 
     . $commonPath
     $capturePath = Join-Path $tempRoot 'captured-message.txt'
@@ -27,7 +22,7 @@ $messageIndex = [Array]::IndexOf($args, '--message')
 $global:LASTEXITCODE = 0
 '{"ok":true,"messageId":"fake-multiline"}'
 '@ | Set-Content -LiteralPath $fakeOpenClaw -Encoding utf8NoBOM
-    $script:OpenClawPs1 = $fakeOpenClaw
+    function Get-FinancialDelivery { [pscustomobject]@{ OpenClawCommand=$fakeOpenClaw; Account='fixture-account'; Target='fixture-target' } }
     $env:MASHIRO_CAPTURE_PATH = $capturePath
     $expected = "【第 1 天财报课】`n`n【财报事实】`n营业收入`n`n【官方原文】`nhttps://example.test/report.pdf"
     Send-FinancialWeixinMessage -Message $expected | Out-Null
@@ -37,15 +32,15 @@ $global:LASTEXITCODE = 0
 
     $db = Join-Path $tempRoot 'test.sqlite'
     $cli = Join-Path $pluginRoot 'runtime\cli.mjs'
-    $account = 'ea8fd13b2100-im-bot'
-    $target = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'
+    $account = 'fixture-account'
+    $target = 'fixture-target'
     & node $cli init --sqlite-path $db --account-id $account --conversation-id $target --installed-date 2026-08-09 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'init failed' }
-    $first = & pwsh -NoProfile -File $worker -CourseType financial_report -RuntimeRoot $tempRoot -SqlitePath $db -Now '2026-08-10T04:20:00Z' -DryRun | ConvertFrom-Json
+    $first = & pwsh -NoProfile -File $worker -CourseType financial_report -RuntimeRoot $tempRoot -SqlitePath $db -WeixinAccount $account -WeixinTarget $target -Now '2026-08-10T04:20:00Z' -DryRun | ConvertFrom-Json
     if ($first.action -ne 'sent' -or $first.utf8Length -lt 100) { throw 'Chinese dry-run delivery failed' }
-    $second = & pwsh -NoProfile -File $worker -CourseType financial_report -RuntimeRoot $tempRoot -SqlitePath $db -Now '2026-08-10T04:21:00Z' -DryRun | ConvertFrom-Json
+    $second = & pwsh -NoProfile -File $worker -CourseType financial_report -RuntimeRoot $tempRoot -SqlitePath $db -WeixinAccount $account -WeixinTarget $target -Now '2026-08-10T04:21:00Z' -DryRun | ConvertFrom-Json
     if ($second.action -ne 'already_sent') { throw 'duplicate invocation was not idempotent' }
-    $wrongDay = & pwsh -NoProfile -File $worker -CourseType prospectus -RuntimeRoot $tempRoot -SqlitePath $db -Now '2026-08-10T10:10:00Z' -DryRun | ConvertFrom-Json
+    $wrongDay = & pwsh -NoProfile -File $worker -CourseType prospectus -RuntimeRoot $tempRoot -SqlitePath $db -WeixinAccount $account -WeixinTarget $target -Now '2026-08-10T10:10:00Z' -DryRun | ConvertFrom-Json
     if ($wrongDay.action -ne 'wrong_day') { throw 'wrong weekday should not send' }
     @{ ok = $true; database = $db } | ConvertTo-Json -Compress
 } finally {

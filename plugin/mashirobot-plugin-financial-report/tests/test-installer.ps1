@@ -21,7 +21,7 @@ try {
         Start-Sleep -Milliseconds 500
         $info = Get-ScheduledTaskInfo -TaskName $feedbackName
         $state = (Get-ScheduledTask -TaskName $feedbackName).State
-    } while (($info.LastRunTime.Year -lt 2000 -or $state -eq 'Running') -and (Get-Date) -lt $deadline)
+    } while (($info.LastRunTime.Year -lt 2000 -or $state -eq 'Running' -or $info.LastTaskResult -eq 267009) -and (Get-Date) -lt $deadline)
     if ($info.LastTaskResult -ne 0) { throw "isolated feedback task result was $($info.LastTaskResult)" }
     foreach ($name in $installed.tasks) {
         [xml]$xml = Export-ScheduledTask -TaskName $name
@@ -32,7 +32,8 @@ try {
     }
     $dailyName = "MashiroBot Financial Report Daily$suffix"
     $dailyTriggers = (Get-ScheduledTask -TaskName $dailyName).Triggers
-    if ($dailyTriggers.Count -ne 2 -or ($dailyTriggers.StartBoundary -notcontains '2026-08-09T12:30:00+08:00') -or ($dailyTriggers.StartBoundary -notcontains '2026-08-09T18:30:00+08:00')) { throw 'financial report triggers are not 12:30 and 18:30' }
+    $dailyTimes = @($dailyTriggers | ForEach-Object { ([DateTimeOffset]::Parse([string]$_.StartBoundary)).ToString('HH:mm:ss') })
+    if ($dailyTriggers.Count -ne 2 -or $dailyTimes -notcontains '12:30:00' -or $dailyTimes -notcontains '18:30:00') { throw 'financial report triggers are not 12:30 and 18:30' }
     if ($dailyTriggers | Where-Object { $_.Repetition.Interval }) { throw 'financial report task must not repeat' }
     $feedbackTrigger = (Get-ScheduledTask -TaskName $feedbackName).Triggers[0]
     if ($feedbackTrigger.Repetition.Interval -ne 'PT30M') { throw 'feedback task must repeat every 30 minutes' }

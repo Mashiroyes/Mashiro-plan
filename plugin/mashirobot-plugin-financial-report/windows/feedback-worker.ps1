@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$RuntimeRoot,
     [Parameter(Mandatory = $true)][string]$SqlitePath,
+    [string]$WeixinAccount,
+    [string]$WeixinTarget,
     [string]$Now,
     [switch]$DryRun
 )
@@ -16,7 +18,8 @@ $pluginRoot = Join-Path $RuntimeRoot 'plugin'
 if (-not (Test-Path -LiteralPath $pluginRoot)) { $pluginRoot = Split-Path -Parent $PSScriptRoot }
 $cliPath = Join-Path $pluginRoot 'runtime\cli.mjs'
 $chatPath = Join-Path $pluginRoot 'runtime\chat-feedback.mjs'
-$baseArgs = @('--sqlite-path', $SqlitePath, '--plugin-root', $pluginRoot, '--account-id', $script:WeixinAccount, '--conversation-id', $script:WeixinTarget)
+$delivery = Get-FinancialDelivery -Account $WeixinAccount -Target $WeixinTarget
+$baseArgs = @('--sqlite-path', $SqlitePath, '--plugin-root', $pluginRoot, '--account-id', $delivery.Account, '--conversation-id', $delivery.Target)
 if ($Now) { $baseArgs += @('--now', $Now) }
 
 $claim = Invoke-FinancialCli -NodePath $nodePath -CliPath $cliPath -Arguments (@('claim-feedback') + $baseArgs)
@@ -35,7 +38,7 @@ try {
         $sessionKey = 'agent:main:financial-report-feedback:' + [string]$feedback.id
         $raw = & $nodePath --no-deprecation $chatPath --plugin-root $pluginRoot --course-type $feedback.course_type `
             --lesson-number ([string]$feedback.lesson_number) --answer-base64 $feedback.answerTextBase64 `
-            --openclaw-path $script:OpenClawCmd --session-key $sessionKey --timeout-seconds 120 2>&1
+            --openclaw-path $delivery.OpenClawCommand --session-key $sessionKey --timeout-seconds 120 2>&1
         if ($LASTEXITCODE -ne 0) { throw ($raw -join [Environment]::NewLine) }
         $jsonLine = @($raw | ForEach-Object { [string]$_ } | Where-Object { $_.TrimStart().StartsWith('{') })[-1]
         if (-not $jsonLine) { throw 'Chat feedback runner returned no JSON object.' }

@@ -26,6 +26,8 @@ $OperationalTools = Join-Path $env:USERPROFILE '.openclaw\workspace\TOOLS.md'
 $GatewayVbs = Join-Path $env:USERPROFILE '.openclaw\gateway.vbs'
 $GatewayCmd = Join-Path $env:USERPROFILE '.openclaw\gateway.cmd'
 $StablePwshAlias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\pwsh.exe'
+$MachineConfigPath = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\machine.json'
+$MachineModulePath = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
 
 function Get-PathMap {
     $Map = @{}
@@ -170,6 +172,20 @@ try {
         $PillowOk = $LASTEXITCODE -eq 0
     }
     Add-HealthCheck 'python-pillow' $PillowOk $(if ($PillowOk) { 'Pillow import succeeded' } else { 'Pillow unavailable from system python.exe' })
+
+    $MachineConfigOk = $false
+    $MachineConfigDetail = [ordered]@{ path=$MachineConfigPath; module=$MachineModulePath }
+    try {
+        if (-not (Test-Path -LiteralPath $MachineModulePath -PathType Leaf)) { throw "Machine configuration helper is missing: $MachineModulePath" }
+        Import-Module $MachineModulePath -Force
+        $MachineConfig = Read-MashiroMachineConfig -Path $MachineConfigPath
+        $Delivery = Resolve-MashiroWeixinDelivery -Config $MachineConfig
+        $MachineConfigDetail.openClawCommand = $Delivery.OpenClawCommand
+        $MachineConfigDetail.weixinAccountConfigured = [bool]$Delivery.Account
+        $MachineConfigDetail.weixinTargetConfigured = [bool]$Delivery.Target
+        $MachineConfigOk = $true
+    } catch { $MachineConfigDetail.error = $_.Exception.Message }
+    Add-HealthCheck 'machine-configuration' $MachineConfigOk $MachineConfigDetail 'verified'
 
     $ManifestPath = Join-Path $PlanPluginRoot 'plugin.json'
     $ManifestOk = $false

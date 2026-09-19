@@ -15,9 +15,7 @@ $OutputEncoding = [Text.UTF8Encoding]::new($false)
 $PluginRoot = Split-Path -Parent $PSScriptRoot
 $Node = if ($NodePath) { $NodePath } else { (Get-Command node.exe -ErrorAction Stop).Source }
 $Cli = Join-Path $PluginRoot 'core\worker-cli.mjs'
-$OpenClaw = 'D:\Program\nodejs\npm_global24\openclaw.ps1'
-$Account = 'ea8fd13b2100-im-bot'
-$Target = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'
+$MachineModule = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
 $LogPath = Join-Path $env:USERPROFILE '.openclaw\logs\mashirobot.log'
 
 function Write-LootLog {
@@ -46,7 +44,10 @@ if ($DryRun) {
 }
 
 try {
-    $sendOutput = & $OpenClaw message send --json --channel 'openclaw-weixin' --account $Account --target $Target --message ([string]$decision.message) 2>&1
+    if (-not (Test-Path -LiteralPath $MachineModule -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $MachineModule" }
+    Import-Module $MachineModule -Force
+    $delivery = Resolve-MashiroWeixinDelivery
+    $sendOutput = & $delivery.OpenClawCommand message send --json --channel 'openclaw-weixin' --account $delivery.Account --target $delivery.Target --message ([string]$decision.message) 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($sendOutput -join [Environment]::NewLine) }
     Write-LootLog @{ action = $Action; entryDate = $decision.entryDate; result = 'sent'; reason = $decision.reason }
     ([ordered]@{ ok = $true; action = 'sent'; entryDate = $decision.entryDate }) | ConvertTo-Json -Compress

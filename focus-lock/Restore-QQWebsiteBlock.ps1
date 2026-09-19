@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ResultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\restore-qq-website-result.json'
+    [string]$ResultPath = (Join-Path $PSScriptRoot 'restore-qq-website-result.json')
 )
 
 $ErrorActionPreference = 'Stop'

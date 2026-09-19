@@ -6,7 +6,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw 'Administrator privileges are required.'
 }
 
-$sourceScript = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\FocusLock.ps1'
+$sourceScript = Join-Path $PSScriptRoot 'FocusLock.ps1'
 $stateRoot = Join-Path $env:ProgramData 'CodexFocusLock'
 $installedScript = Join-Path $stateRoot 'FocusLock.ps1'
 $statePath = Join-Path $stateRoot 'state.json'
@@ -14,8 +14,8 @@ $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
 $hostsEnd = '# END CODEX FOCUS LOCK'
 $browserPatterns = @('*://hanime1.me/*', '*://*.hanime1.me/*')
 $clashRule = 'DOMAIN-SUFFIX,hanime1.me,REJECT'
-$clashRoot = 'C:\Users\Mashiroyes\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev'
-$resultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\reblock-hanime1-result.json'
+$clashRoot = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
+$resultPath = Join-Path $PSScriptRoot 'reblock-hanime1-result.json'
 $changed = [System.Collections.Generic.List[string]]::new()
 
 Copy-Item -LiteralPath $sourceScript -Destination $installedScript -Force

@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('financial_report','prospectus')][string]$CourseType,
     [Parameter(Mandatory = $true)][string]$RuntimeRoot,
     [Parameter(Mandatory = $true)][string]$SqlitePath,
+    [string]$WeixinAccount,
+    [string]$WeixinTarget,
     [string]$Now,
     [switch]$DryRun
 )
@@ -16,7 +18,8 @@ if (-not (Test-Path -LiteralPath $nodePath)) { $nodePath = (Get-Command node.exe
 $cliPath = Join-Path $RuntimeRoot 'plugin\runtime\cli.mjs'
 if (-not (Test-Path -LiteralPath $cliPath)) { $cliPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'runtime\cli.mjs' }
 $pluginRoot = Split-Path -Parent (Split-Path -Parent $cliPath)
-$baseArgs = @('--sqlite-path', $SqlitePath, '--plugin-root', $pluginRoot, '--account-id', $script:WeixinAccount, '--conversation-id', $script:WeixinTarget)
+$delivery = Get-FinancialDelivery -Account $WeixinAccount -Target $WeixinTarget
+$baseArgs = @('--sqlite-path', $SqlitePath, '--plugin-root', $pluginRoot, '--account-id', $delivery.Account, '--conversation-id', $delivery.Target)
 if ($Now) { $baseArgs += @('--now', $Now) }
 
 $claim = $null

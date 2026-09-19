@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateRange(1, 30)][int]$Minutes = 5,
-    [string]$ResultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\temporary-unblock-qq-website-result.json'
+    [string]$ResultPath = (Join-Path $PSScriptRoot 'temporary-unblock-qq-website-result.json')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +15,7 @@ $restoreTask = 'CodexFocusLock-QQWebsiteRestore'
 $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
 $restoreSource = Join-Path $PSScriptRoot 'Restore-QQWebsiteBlock.ps1'
 $restoreInstalled = 'C:\ProgramData\CodexFocusLock\Restore-QQWebsiteBlock.ps1'
-$clashRoot = 'C:\Users\Mashiroyes\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev'
+$clashRoot = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $restoreAt = (Get-Date).AddMinutes($Minutes)
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backupRoot = Join-Path 'C:\ProgramData\MashiroBot\migration-backups\qq-website-release' $stamp
@@ -84,7 +84,7 @@ foreach ($file in $clashFiles | Select-Object -Unique) {
 
 Copy-Item -LiteralPath $restoreSource -Destination $restoreInstalled -Force
 $pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
-$arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ResultPath "{1}"' -f $restoreInstalled,('D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\restore-qq-website-result.json')
+$arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ResultPath "{1}"' -f $restoreInstalled,(Join-Path $stateRoot 'restore-qq-website-result.json')
 $action = New-ScheduledTaskAction -Execute $pwsh -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -Once -At $restoreAt
 $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest

@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $taskName = 'CodexFocusLock-BilibiliRestore'
 $repairTask = 'CodexFocusLock-Repair'
 $installedScript = 'C:\ProgramData\CodexFocusLock\FocusLock.ps1'
-$resultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\restore-bilibili-result.json'
+$resultPath = Join-Path $PSScriptRoot 'restore-bilibili-result.json'
 
 try {
     if (-not (Test-Path -LiteralPath $installedScript)) {

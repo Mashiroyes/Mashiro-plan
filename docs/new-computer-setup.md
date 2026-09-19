@@ -40,14 +40,41 @@ GitHub 仓库不包含 OpenClaw 的账号、令牌、微信连接和 Gateway 配
 
 1. 安装 OpenClaw，确保 `Get-Command openclaw` 能找到命令。
 2. 安装并登录当前使用的 Tencent Weixin OpenClaw 包。
-3. 恢复 `%USERPROFILE%\.openclaw` 中必要的账号和 Gateway 配置，确认 `gateway.vbs`、`gateway.cmd` 和微信账号可用。
-4. 当前部分 worker 仍引用 `D:\Program\nodejs\npm_global24\openclaw.ps1` 或 `.cmd`。新电脑应把 OpenClaw 安装到相同位置，或在部署前修改这些脚本中的路径；仅加入 `PATH` 不能覆盖这些硬编码引用。
+3. 优先在新电脑重新登录。如果选择迁移，至少安全复制 `openclaw.json`、`gateway.vbs`、`gateway.cmd`、`identity`、`devices` 和 `openclaw-weixin\accounts`；不要复制日志、缓存和旧备份。
+4. 确认 `openclaw channels status --json` 能看到 `openclaw-weixin`。项目通过本机配置自动使用当前 OpenClaw 命令，不要求保持旧电脑安装路径。
 
 不得把令牌、账号凭据或 `%USERPROFILE%\.openclaw` 整个目录提交到 GitHub。
 
 ### Python 路径
 
 所有 worker 统一调用系统 `python.exe`。安装 Python 后把它加入 `PATH`，并确认 `python --version` 和 `python -c "from PIL import Image"` 成功即可；不需要设置项目专用 Python 环境变量，也不使用用户目录中的固定 Python 路径。安装或修改 `PATH` 后，重新打开终端和 OpenClaw Gateway。
+
+### 本机配置
+
+账号、目标会话和软件路径统一保存在：
+
+```text
+%LOCALAPPDATA%\MashiroBot\config\machine.json
+```
+
+该文件不在 Git 仓库中，也不得上传。首次部署使用微信目标会话 ID 初始化；OpenClaw 命令和默认微信账号会自动发现：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\core\config\initialize-machine-config.ps1 `
+  -WeixinTarget '<你的微信目标会话ID>'
+```
+
+如果网易云或游戏不在仓库默认路径，编辑 `machine.json` 中的 `cloudMusicPath` 和 `gameExecutableOverrides`。游戏覆盖项使用 `games.json` 内的游戏 `key`，例如：
+
+```json
+{
+  "gameExecutableOverrides": {
+    "elden-ring": "E:\\SteamLibrary\\steamapps\\common\\ELDEN RING\\Game\\eldenring.exe"
+  }
+}
+```
+
+仓库可以放在任意目录；OpenClaw 适配器会在部署时根据当前仓库位置生成。
 
 ### 数据库与本机状态
 
@@ -84,21 +111,21 @@ Set-Location .\plan
 Test-Path .\sqlite\openclaw-planner.sqlite
 ```
 
-2. 安装基础环境和 Pillow，完成 OpenClaw/微信配置，然后先运行健康检查。
+2. 安装基础环境和 Pillow，完成 OpenClaw/微信配置，再初始化本机配置。
 
 ```powershell
-pwsh -NoProfile -File .\core\health\check-mashirobot.ps1 -PreStart
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\core\config\initialize-machine-config.ps1 -WeixinTarget '<你的微信目标会话ID>'
 ```
 
-3. 修复微信薄适配入口并安装 Gateway 看门狗。
+3. 推荐在管理员 PowerShell 7 中执行统一安装。它会修复微信适配器、部署 Gateway 看门狗、FocusLock、禁止名单、游戏锁、QQ、战利品和英语统计；不会安装温度监控。
 
 ```powershell
-pwsh -NoProfile -File .\core\adapter\repair-openclaw-adapter.ps1 -WhatIfReport
-pwsh -NoProfile -File .\core\adapter\repair-openclaw-adapter.ps1
-pwsh -NoProfile -File .\core\health\install-openclaw-gateway-watchdog.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\core\config\install-new-computer.ps1 `
+  -Action Install `
+  -WeixinTarget '<你的微信目标会话ID>'
 ```
 
-4. 在管理员 PowerShell 7 中部署 FocusLock 和游戏/禁止名单后台 worker。
+4. 如果不使用统一安装器，才按以下命令分别部署 FocusLock 和游戏/禁止名单后台 worker。
 
 ```powershell
 $db = (Resolve-Path .\sqlite\openclaw-planner.sqlite).Path
@@ -110,7 +137,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-game-ti
 
 游戏计时器的单次提醒/强退任务由插件在创建计时时自动注册，不需要预先手工调用 `install-game-timer.ps1`。
 
-5. 按需要安装其余后台功能。
+5. 分步部署时，按需要安装其余后台功能。财报插件默认关闭；只有启用该插件时才安装财报 worker。
 
 ```powershell
 $db = (Resolve-Path .\sqlite\openclaw-planner.sqlite).Path
@@ -121,7 +148,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-financi
 # pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-game-timer\audit\powershell\install-audit.ps1 -Mode Install -SqlitePath $db -TargetsPath 'C:\path\to\targets.json'
 ```
 
-6. 重启 Gateway，运行最终健康检查和核心测试。
+6. 统一安装器会重启 Gateway 并运行健康检查。分步安装时手动执行以下命令：
 
 ```powershell
 pwsh -NoProfile -File .\core\adapter\start-openclaw-gateway.ps1

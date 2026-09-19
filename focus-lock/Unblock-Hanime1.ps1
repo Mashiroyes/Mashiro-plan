@@ -13,9 +13,9 @@ $stateRoot = Join-Path $env:ProgramData 'CodexFocusLock'
 $statePath = Join-Path $stateRoot 'state.json'
 $installedScript = Join-Path $stateRoot 'FocusLock.ps1'
 $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
-$clashRoot = Join-Path 'C:\Users\Mashiroyes\AppData\Roaming' 'io.github.clash-verge-rev.clash-verge-rev'
-$backupRoot = Join-Path 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\backups' (Get-Date -Format 'yyyyMMdd-HHmmss')
-$resultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\unblock-hanime1-result.json'
+$clashRoot = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
+$backupRoot = Join-Path (Join-Path $PSScriptRoot 'backups') (Get-Date -Format 'yyyyMMdd-HHmmss')
+$resultPath = Join-Path $PSScriptRoot 'unblock-hanime1-result.json'
 New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
 
 $changed = [System.Collections.Generic.List[string]]::new()

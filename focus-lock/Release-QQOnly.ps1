@@ -4,7 +4,7 @@ $ep=Join-Path $root 'bilibili-qq-expiry.json'
 $x=Get-Content -Raw $ep | ConvertFrom-Json
 $x | Add-Member -NotePropertyName QQReleased -NotePropertyValue $true -Force
 $x | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ep -Encoding UTF8
-Copy-Item -LiteralPath 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\FocusLock.ps1' -Destination 'C:\ProgramData\CodexFocusLock\FocusLock.ps1' -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'FocusLock.ps1') -Destination 'C:\ProgramData\CodexFocusLock\FocusLock.ps1' -Force
 $hosts="$env:SystemRoot\System32\drivers\etc\hosts"
 $qq='(?i)\b(?:im\.qq\.com|pc\.qq\.com|dldir\.qq\.com|dldir1\.qq\.com|dldir1v6\.qq\.com|download\.imqq\.com)\b'
 (Get-Content $hosts | Where-Object { $_ -notmatch $qq }) | Set-Content $hosts -Encoding utf8

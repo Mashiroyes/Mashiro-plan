@@ -16,6 +16,7 @@ import { formatAuditSummary } from "./audit/core/audit-format.mjs";
 import { buildAuditTargets, writeAuditTargetManifest } from "./audit/core/target-manifest.mjs";
 import * as blockPlugin from "./block/index.mjs";
 import { createPendingDeleteStore } from "./core/pending-delete-storage.mjs";
+import { applyGameExecutableOverrides, readMachineConfig } from "../../core/config/machine-config.mjs";
 
 const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
 const defaultConfigPath = path.join(pluginRoot, "core", "games.json");
@@ -26,7 +27,11 @@ const auditCommands = new Set(["查询今日使用审计", "查询本周使用�
 
 function configPath(context) { return context.gameTimerConfigPath ?? defaultConfigPath; }
 function sqlitePath(context) { return context.sqlitePath ?? defaultSqlitePath; }
-function readGames(context) { return loadGameConfig(JSON.parse(fs.readFileSync(configPath(context), "utf8"))); }
+function readGames(context) {
+  const raw = JSON.parse(fs.readFileSync(configPath(context), "utf8"));
+  const machine = context.machineConfig ?? (() => { try { return readMachineConfig(); } catch { return null; } })();
+  return loadGameConfig({ ...raw, games: applyGameExecutableOverrides(raw.games ?? [], machine) });
+}
 function reply(text, command = "游戏计时") { return { handled: true, command, reply: text, mediaPaths: [] }; }
 function formatAt(value) { return new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "short", timeStyle: "medium" }).format(new Date(value)); }
 

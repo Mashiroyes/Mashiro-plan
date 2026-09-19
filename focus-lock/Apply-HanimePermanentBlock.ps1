@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $OutputEncoding
 
-$sourceScript = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\FocusLock.ps1'
+$sourceScript = Join-Path $PSScriptRoot 'FocusLock.ps1'
 $installedScript = 'C:\ProgramData\CodexFocusLock\FocusLock.ps1'
 $statePath = 'C:\ProgramData\CodexFocusLock\state.json'
 $resultPath = 'C:\ProgramData\CodexFocusLock\hanime-permanent-block-result.json'

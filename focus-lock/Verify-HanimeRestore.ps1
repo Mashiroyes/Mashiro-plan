@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $taskName = 'CodexFocusLock-HanimeRestore'
-$resultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\temporary-unblock-hanime1-task-verification.json'
+$resultPath = Join-Path $PSScriptRoot 'temporary-unblock-hanime1-task-verification.json'
 try {
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
     $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop

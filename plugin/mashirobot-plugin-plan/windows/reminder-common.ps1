@@ -3,9 +3,12 @@ Set-StrictMode -Version Latest
 $script:PlannerPython = (Get-Command python.exe -ErrorAction Stop).Source
 $script:PlannerCli = Join-Path (Split-Path -Parent $PSScriptRoot) 'planner\planner.py'
 $script:PluginId = 'mashirobot-plugin-plan'
-$script:OpenClawCmd = 'D:\Program\nodejs\npm_global24\openclaw.cmd'
-$script:WeixinAccount = 'ea8fd13b2100-im-bot'
-$script:WeixinTarget = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'
+function Get-MashiroDeliveryConfig {
+    $module = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
+    if (-not (Test-Path -LiteralPath $module -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $module" }
+    Import-Module $module -Force
+    return Resolve-MashiroWeixinDelivery
+}
 
 function Get-ShanghaiNow {
     return [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
@@ -84,9 +87,7 @@ function Send-OpenClawWeixinMessage {
         [switch]$DryRun
     )
 
-    if (-not (Test-Path -LiteralPath $script:OpenClawCmd)) {
-        throw "OpenClaw command not found: $script:OpenClawCmd"
-    }
+    $delivery = Get-MashiroDeliveryConfig
 
     $attempts = if ($DryRun) { 1 } else { 4 }
     $lastError = $null
@@ -95,12 +96,12 @@ function Send-OpenClawWeixinMessage {
             $arguments = @(
                 'message', 'send', '--json',
                 '--channel', 'openclaw-weixin',
-                '--account', $script:WeixinAccount,
-                '--target', $script:WeixinTarget,
+                '--account', $delivery.Account,
+                '--target', $delivery.Target,
                 '--message', $Message
             )
             if ($DryRun) { $arguments += '--dry-run' }
-            $sendOutput = & $script:OpenClawCmd @arguments 2>&1
+            $sendOutput = & $delivery.OpenClawCommand @arguments 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw ($sendOutput -join [Environment]::NewLine)
             }

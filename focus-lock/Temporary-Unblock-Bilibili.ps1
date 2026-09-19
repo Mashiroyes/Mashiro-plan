@@ -14,10 +14,10 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $repairTask = 'CodexFocusLock-Repair'
 $restoreTask = 'CodexFocusLock-BilibiliRestore'
 $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
-$restoreSource = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\Restore-BilibiliBlock.ps1'
+$restoreSource = Join-Path $PSScriptRoot 'Restore-BilibiliBlock.ps1'
 $restoreInstalled = 'C:\ProgramData\CodexFocusLock\Restore-BilibiliBlock.ps1'
-$resultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\temporary-unblock-bilibili-result.json'
-$clashRoot = 'C:\Users\Mashiroyes\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev'
+$resultPath = Join-Path $PSScriptRoot 'temporary-unblock-bilibili-result.json'
+$clashRoot = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $restoreAt = (Get-Date).AddMinutes($Minutes)
 
 $domainPattern = '(?i)(?:^|\.)(?:bilibili\.com|b23\.tv|bilivideo\.com|hdslb\.com)$'

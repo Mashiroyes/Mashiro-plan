@@ -1,3 +1,3 @@
 export {
   handleMashiroBotMessage as handleFastRoutineCommand,
-} from "file:///D:/BaiduSyncdisk/Study/AI/codex/codex-study/plan/core/index.mjs";
+} from "__MASHIROBOT_INDEX_URI__";

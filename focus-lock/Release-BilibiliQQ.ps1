@@ -20,7 +20,7 @@ if ($isFixture) {
     }
     $stateRoot = 'C:\ProgramData\CodexFocusLock'
     $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
-    $clashRoot = 'C:\Users\Mashiroyes\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev'
+    $clashRoot = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 }
 
 $statePath = Join-Path $stateRoot 'state.json'

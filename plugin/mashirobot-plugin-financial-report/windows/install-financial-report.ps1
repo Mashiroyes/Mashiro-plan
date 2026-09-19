@@ -23,7 +23,9 @@ $SqlitePath = [IO.Path]::GetFullPath($SqlitePath)
 $pwshPath = (Get-Command pwsh.exe -ErrorAction Stop).Source
 $wscriptPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
 $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
-$openClawPath = 'D:\Program\nodejs\npm_global24\openclaw.cmd'
+$machineModule = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
+$openClawPath = if (Test-Path -LiteralPath $machineModule) { Import-Module $machineModule -Force; Resolve-MashiroOpenClawCommand } else { '' }
+$delivery = if ($openClawPath) { Resolve-MashiroWeixinDelivery } else { $null }
 $taskNames = @(
     "MashiroBot Financial Report Daily$TaskSuffix",
     "MashiroBot Prospectus Tuesday Friday$TaskSuffix",
@@ -119,7 +121,8 @@ try {
 
 $cliPath = Join-Path $RuntimeRoot 'plugin\runtime\cli.mjs'
 $installedDate = (Get-Date).ToString('yyyy-MM-dd')
-$init = & $nodePath $cliPath init --sqlite-path $SqlitePath --account-id 'ea8fd13b2100-im-bot' --conversation-id 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat' --installed-date $installedDate 2>&1
+if (-not $delivery) { throw 'MashiroBot machine delivery configuration is missing. Run core\config\initialize-machine-config.ps1.' }
+$init = & $nodePath $cliPath init --sqlite-path $SqlitePath --account-id $delivery.Account --conversation-id $delivery.Target --installed-date $installedDate 2>&1
 if ($LASTEXITCODE -ne 0) { throw ($init -join [Environment]::NewLine) }
 
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited

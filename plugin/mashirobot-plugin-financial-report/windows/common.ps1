@@ -1,9 +1,12 @@
 Set-StrictMode -Version Latest
 
-$script:OpenClawCmd = 'D:\Program\nodejs\npm_global24\openclaw.cmd'
-$script:OpenClawPs1 = 'D:\Program\nodejs\npm_global24\openclaw.ps1'
-$script:WeixinAccount = 'ea8fd13b2100-im-bot'
-$script:WeixinTarget = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'
+function Get-FinancialDelivery {
+    param([string]$Account, [string]$Target)
+    $module = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
+    if (-not (Test-Path -LiteralPath $module -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $module" }
+    Import-Module $module -Force
+    return Resolve-MashiroWeixinDelivery -Account $Account -Target $Target
+}
 
 function Write-FinancialReportLog {
     param([Parameter(Mandatory = $true)][string]$Event, [hashtable]$Data = @{})
@@ -25,9 +28,9 @@ function Invoke-FinancialCli {
 function Send-FinancialWeixinMessage {
     param([Parameter(Mandatory = $true)][string]$Message, [switch]$DryRun)
     if ($DryRun) { return @{ ok = $true; dryRun = $true; utf8Length = [Text.Encoding]::UTF8.GetByteCount($Message) } }
-    if (-not (Test-Path -LiteralPath $script:OpenClawPs1)) { throw "OpenClaw PowerShell entry not found: $script:OpenClawPs1" }
-    $output = & $script:OpenClawPs1 message send --json --channel openclaw-weixin `
-        --account $script:WeixinAccount --target $script:WeixinTarget --message $Message 2>&1
+    $delivery = Get-FinancialDelivery
+    $output = & $delivery.OpenClawCommand message send --json --channel openclaw-weixin `
+        --account $delivery.Account --target $delivery.Target --message $Message 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
     return (($output -join [Environment]::NewLine) | ConvertFrom-Json -AsHashtable)
 }

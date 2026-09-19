@@ -10,9 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $OutputEncoding
-$OpenClawCmd = 'D:\Program\nodejs\npm_global24\openclaw.ps1'
-$WeixinAccount = 'ea8fd13b2100-im-bot'
-$WeixinTarget = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'
+$MachineModule = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
 $DbHelper = Join-Path $PSScriptRoot 'game-timer-db-v1.mjs'
 
 function Write-WorkerLog([string]$Message) {
@@ -40,12 +38,15 @@ function Update-TimerState([hashtable]$Payload) {
 
 function Send-Weixin([string]$Message) {
     if ($DryRun) { return }
+    if (-not (Test-Path -LiteralPath $MachineModule -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $MachineModule" }
+    Import-Module $MachineModule -Force
+    $delivery = Resolve-MashiroWeixinDelivery
     $lastError = $null
     for ($attempt = 1; $attempt -le 4; $attempt++) {
         try {
-            $output = & $OpenClawCmd message send --json `
-                --channel 'openclaw-weixin' --account $WeixinAccount `
-                --target $WeixinTarget --message $Message 2>&1
+            $output = & $delivery.OpenClawCommand message send --json `
+                --channel 'openclaw-weixin' --account $delivery.Account `
+                --target $delivery.Target --message $Message 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
             return
         } catch {

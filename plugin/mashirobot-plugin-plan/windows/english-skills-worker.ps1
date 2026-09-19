@@ -17,9 +17,7 @@ if (-not $SqlitePath) {
 $SqlitePath = [IO.Path]::GetFullPath($SqlitePath)
 $planner = Join-Path $PluginRoot 'planner\planner.py'
 $python = (Get-Command python.exe -ErrorAction Stop).Source
-$openClaw = 'D:\Program\nodejs\npm_global24\openclaw.ps1'
-$account = 'ea8fd13b2100-im-bot'
-$target = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'
+$machineModule = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
 
 function Invoke-PlannerJson {
     param([string[]]$Arguments)
@@ -103,7 +101,10 @@ foreach ($period in $due) {
         $null = Invoke-PlannerJson @('english-skills-chart', '--payload-base64', $encoded, '--output', $chartPath)
         $message = New-ReportMessage $period $summary
         if (-not $DryRun) {
-            $sendOutput = & $openClaw message send --json --channel 'openclaw-weixin' --account $account --target $target --message $message --media $chartPath 2>&1
+            if (-not (Test-Path -LiteralPath $machineModule -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $machineModule" }
+            Import-Module $machineModule -Force
+            $delivery = Resolve-MashiroWeixinDelivery
+            $sendOutput = & $delivery.OpenClawCommand message send --json --channel 'openclaw-weixin' --account $delivery.Account --target $delivery.Target --message $message --media $chartPath 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($sendOutput -join [Environment]::NewLine) }
             $null = Invoke-PlannerJson @('finish-english-skill-delivery', '--period-key', $period.periodKey, '--status', 'sent')
         }

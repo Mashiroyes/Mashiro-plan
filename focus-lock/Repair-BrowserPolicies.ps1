@@ -5,10 +5,10 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw 'Administrator privileges are required.'
 }
 
-$sourceScript = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\FocusLock.ps1'
+$sourceScript = Join-Path $PSScriptRoot 'FocusLock.ps1'
 $installedScript = 'C:\ProgramData\CodexFocusLock\FocusLock.ps1'
 $statePath = 'C:\ProgramData\CodexFocusLock\state.json'
-$resultPath = 'D:\BaiduSyncdisk\Study\AI\codex\codex-study\focus-lock\repair-browser-policies-result.json'
+$resultPath = Join-Path $PSScriptRoot 'repair-browser-policies-result.json'
 $hostsPath = 'C:\Windows\System32\drivers\etc\hosts'
 $hostsEnd = '# END CODEX FOCUS LOCK'
 

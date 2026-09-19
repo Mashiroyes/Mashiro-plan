@@ -2,7 +2,6 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'reminder-common.ps1')
 
 $script:WakeupTaskPrefix = 'OpenClaw-Wakeup-'
-$script:OpenClawCmd = 'D:\Program\nodejs\npm_global24\openclaw.cmd'
 
 function Get-ShanghaiNow {
     return [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
@@ -44,13 +43,10 @@ function Remove-AllWakeupScheduledTasks {
 }
 
 function Remove-LegacyWakeupCronJobs {
-    if (-not (Test-Path -LiteralPath $script:OpenClawCmd)) {
-        Write-WakeupLog "Legacy cron cleanup skipped; OpenClaw command missing: $script:OpenClawCmd"
-        return @()
-    }
+    $delivery = Get-MashiroDeliveryConfig
 
     try {
-        $raw = & $script:OpenClawCmd cron list --all --json 2>&1
+        $raw = & $delivery.OpenClawCommand cron list --all --json 2>&1
         if ($LASTEXITCODE -ne 0) { throw ($raw -join [Environment]::NewLine) }
         $data = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
         $removed = @()
@@ -64,7 +60,7 @@ function Remove-LegacyWakeupCronJobs {
             ) -join ' '
             if ($text -notmatch '(?i)起床|wake[\s_-]*up|wakeup') { continue }
 
-            $removeOutput = & $script:OpenClawCmd cron rm ([string]$job.id) --json 2>&1
+            $removeOutput = & $delivery.OpenClawCommand cron rm ([string]$job.id) --json 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw ('Could not remove legacy wakeup cron {0}: {1}' -f $job.id, ($removeOutput -join [Environment]::NewLine))
             }

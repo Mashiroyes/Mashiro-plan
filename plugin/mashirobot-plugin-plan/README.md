@@ -5,13 +5,13 @@
 ## 位置与入口
 
 ```text
-D:\BaiduSyncdisk\Study\AI\codex\codex-study\plan\plugin\mashirobot-plugin-plan
+<仓库目录>\plugin\mashirobot-plugin-plan
 ```
 
 正式数据库：
 
 ```text
-D:\BaiduSyncdisk\Study\AI\codex\codex-study\plan\sqlite\openclaw-planner.sqlite
+<仓库目录>\sqlite\openclaw-planner.sqlite
 ```
 
 清单中的精确指令为 `/计划` 和 `/计划详细`。其余自然语言先由无副作用的 `match` 判断，再由 `handle` 执行；已匹配但失败的消息也在本地结束，不会转交 GPT。
