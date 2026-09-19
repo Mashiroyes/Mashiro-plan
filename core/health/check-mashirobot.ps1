@@ -119,13 +119,6 @@ function Add-HealthCheck {
 }
 
 function Resolve-PythonPath {
-    foreach ($Candidate in @(
-        $env:OPENCLAW_PYTHON_PATH,
-        $env:MASHIROBOT_PYTHON,
-        (Join-Path $env:LOCALAPPDATA 'Python\pythoncore-3.14-64\python.exe')
-    )) {
-        if ($Candidate -and (Test-Path -LiteralPath $Candidate -PathType Leaf)) { return $Candidate }
-    }
     $Command = Get-Command python.exe -ErrorAction SilentlyContinue
     if ($Command) { return $Command.Source }
     return $null
@@ -171,6 +164,12 @@ try {
         $PythonOk = $LASTEXITCODE -eq 0
     }
     Add-HealthCheck 'python' $PythonOk $(if ($Python) { $Python } else { 'python.exe not found' })
+    $PillowOk = $false
+    if ($PythonOk) {
+        & $Python -c 'from PIL import Image; print(Image.__version__)' *> $null
+        $PillowOk = $LASTEXITCODE -eq 0
+    }
+    Add-HealthCheck 'python-pillow' $PillowOk $(if ($PillowOk) { 'Pillow import succeeded' } else { 'Pillow unavailable from system python.exe' })
 
     $ManifestPath = Join-Path $PlanPluginRoot 'plugin.json'
     $ManifestOk = $false

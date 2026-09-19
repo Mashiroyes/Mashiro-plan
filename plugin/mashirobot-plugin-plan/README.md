@@ -310,7 +310,7 @@ node --test plan/plugin/mashirobot-plugin-plan/tests/route-compatibility.test.mj
 Python 数据和图表测试：
 
 ```powershell
-& "C:\Users\Mashiroyes\AppData\Local\Python\pythoncore-3.14-64\python.exe" -m unittest discover -s "plan\plugin\mashirobot-plugin-plan\tests" -p "test_*.py" -v
+python -m unittest discover -s "plan\plugin\mashirobot-plugin-plan\tests" -p "test_*.py" -v
 ```
 
 Windows 动作测试使用临时 SQLite，不应修改正式数据库：

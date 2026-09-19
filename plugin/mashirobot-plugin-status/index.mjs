@@ -13,7 +13,7 @@ const HARDWARE_COMMANDS = new Set(["硬件信息", "hardware", "/硬件信息"])
 const RENDER_VERSION = "status-card-v2";
 
 function reply(text, command = "状态") { return { handled: true, command, reply: text, mediaPaths: [] }; }
-function pythonPath(context) { return context.pythonExecutable ?? (process.platform === "win32" ? "python" : "python3"); }
+function pythonPath() { return "python"; }
 
 export function match(message) {
   const text = String(message ?? "").trim();
@@ -49,7 +49,7 @@ async function renderAll(data, kind, context, tempRoot) {
       const encodedPayload = Buffer.from(JSON.stringify(data), "utf8").toString("base64");
       const encodedOutputs = Buffer.from(JSON.stringify(targets), "utf8").toString("base64");
       await processRunner(context)({
-        executable: pythonPath(context),
+        executable: pythonPath(),
         args: [rendererPath, "--payload-base64", encodedPayload, "--outputs-base64", encodedOutputs],
         timeoutMs: 30_000,
         output: "text",

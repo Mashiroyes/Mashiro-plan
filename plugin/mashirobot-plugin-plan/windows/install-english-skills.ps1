@@ -25,6 +25,7 @@ $planRoot = Split-Path -Parent (Split-Path -Parent $SourcePluginRoot)
 if (-not $SqlitePath) { $SqlitePath = Join-Path $planRoot 'sqlite\openclaw-planner.sqlite' }
 $SqlitePath = [IO.Path]::GetFullPath($SqlitePath)
 $pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
+$python = (Get-Command python.exe -ErrorAction Stop).Source
 $wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
 
 function Get-Inspection {
@@ -61,7 +62,6 @@ if ($Action -eq 'Uninstall') {
 if (-not (Test-Path -LiteralPath $SourcePluginRoot -PathType Container)) { throw "Source plugin not found: $SourcePluginRoot" }
 [IO.Directory]::CreateDirectory($RuntimeBase) | Out-Null
 if (Test-Path -LiteralPath $SqlitePath) {
-    $python = Join-Path $env:LOCALAPPDATA 'Python\pythoncore-3.14-64\python.exe'
     $checkScript = "import sqlite3,sys; d=sqlite3.connect(sys.argv[1]); d.execute('PRAGMA wal_checkpoint(FULL)').fetchall(); print(d.execute('PRAGMA integrity_check').fetchone()[0]); d.close()"
     $integrity = & $python -c $checkScript $SqlitePath 2>&1
     if ($LASTEXITCODE -ne 0 -or ($integrity -join '').Trim() -ne 'ok') { throw 'SQLite checkpoint or integrity check failed before migration.' }
@@ -74,9 +74,12 @@ if (Test-Path -LiteralPath $SqlitePath) {
 
 $staging = Join-Path $RuntimeBase ('staging-' + [guid]::NewGuid().ToString('N'))
 $stagingPlugin = Join-Path $staging 'plugin'
+$languagePluginRoot = Join-Path (Split-Path -Parent $SourcePluginRoot) 'mashirobot-plugin-language'
 [IO.Directory]::CreateDirectory($stagingPlugin) | Out-Null
 foreach ($directory in @('planner','config','windows')) { Copy-Item -LiteralPath (Join-Path $SourcePluginRoot $directory) -Destination $stagingPlugin -Recurse -Force }
 foreach ($file in @('plugin.json','README.md')) { Copy-Item -LiteralPath (Join-Path $SourcePluginRoot $file) -Destination $stagingPlugin -Force }
+if (-not (Test-Path -LiteralPath $languagePluginRoot -PathType Container)) { throw "Language plugin not found: $languagePluginRoot" }
+Copy-Item -LiteralPath $languagePluginRoot -Destination $staging -Recurse -Force
 if (Test-Path -LiteralPath $RuntimeRoot) {
     $archived = Join-Path $RuntimeBase ('runtime-v1.previous-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
     Move-Item -LiteralPath $RuntimeRoot -Destination $archived
@@ -84,7 +87,7 @@ if (Test-Path -LiteralPath $RuntimeRoot) {
 Move-Item -LiteralPath $staging -Destination $RuntimeRoot
 
 $env:OPENCLAW_PLANNER_DB_PATH = $SqlitePath
-$initialized = & (Join-Path $env:LOCALAPPDATA 'Python\pythoncore-3.14-64\python.exe') (Join-Path $RuntimePlugin 'planner\planner.py') init 2>&1
+$initialized = & $python (Join-Path $RuntimePlugin 'planner\planner.py') init 2>&1
 if ($LASTEXITCODE -ne 0) { throw ($initialized -join [Environment]::NewLine) }
 
 $worker = Join-Path $RuntimePlugin 'windows\english-skills-worker.ps1'

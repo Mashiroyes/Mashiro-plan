@@ -9,7 +9,7 @@ $pluginRoot = Split-Path -Parent $PSScriptRoot
 $windowsRoot = Join-Path $pluginRoot 'windows'
 $entry = Join-Path $windowsRoot 'routine-reminder.ps1'
 $planner = Join-Path $pluginRoot 'planner\planner.py'
-$python = 'C:\Users\Mashiroyes\AppData\Local\Python\pythoncore-3.14-64\python.exe'
+$python = (Get-Command python.exe -ErrorAction Stop).Source
 $tempRoot = Join-Path $env:TEMP ('mashirobot-windows-test-' + [Guid]::NewGuid().ToString('N'))
 $env:OPENCLAW_PLANNER_DB_PATH = Join-Path $tempRoot 'planner.sqlite'
 [IO.Directory]::CreateDirectory($tempRoot) | Out-Null

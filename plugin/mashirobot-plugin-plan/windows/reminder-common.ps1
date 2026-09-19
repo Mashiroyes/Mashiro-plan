@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:PlannerPython = 'C:\Users\Mashiroyes\AppData\Local\Python\pythoncore-3.14-64\python.exe'
+$script:PlannerPython = (Get-Command python.exe -ErrorAction Stop).Source
 $script:PlannerCli = Join-Path (Split-Path -Parent $PSScriptRoot) 'planner\planner.py'
 $script:PluginId = 'mashirobot-plugin-plan'
 $script:OpenClawCmd = 'D:\Program\nodejs\npm_global24\openclaw.cmd'

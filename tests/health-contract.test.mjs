@@ -67,11 +67,19 @@ test("plugin health promises are awaited", async () => {
 });
 
 test("plan file checks expose the common health contract", () => {
-  const result = runPlanHealthChecks({ exists: () => true, now: () => new Date(now).getTime() });
+  const result = runPlanHealthChecks({
+    exists: () => true,
+    now: () => new Date(now).getTime(),
+    runPython: (command, args) => {
+      assert.equal(command, "python");
+      assert.deepEqual(args, ["-c", "from PIL import Image; print(Image.__version__)"]);
+      return { status: 0, stdout: "12.1.1\n" };
+    },
+  });
   assert.equal(result.ok, true);
-  for (const entry of Object.values(result.checks)) {
+  for (const [name, entry] of Object.entries(result.checks)) {
     assert.deepEqual(Object.keys(entry), ["ok", "level", "evidence", "checkedAt"]);
-    assert.equal(entry.level, "file");
+    assert.equal(entry.level, name === "python" ? "verified" : "file");
     assert.equal(entry.checkedAt, now);
   }
 });

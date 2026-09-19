@@ -47,14 +47,7 @@ GitHub 仓库不包含 OpenClaw 的账号、令牌、微信连接和 Gateway 配
 
 ### Python 路径
 
-项目优先读取 `OPENCLAW_PYTHON_PATH` 或 `MASHIROBOT_PYTHON`，部分旧 worker 仍使用 `%LOCALAPPDATA%\Python\pythoncore-3.14-64\python.exe`。推荐把 Python 3.14 安装到该位置，并同时设置用户环境变量：
-
-```powershell
-[Environment]::SetEnvironmentVariable('MASHIROBOT_PYTHON', (Get-Command python.exe).Source, 'User')
-[Environment]::SetEnvironmentVariable('OPENCLAW_PYTHON_PATH', (Get-Command python.exe).Source, 'User')
-```
-
-设置后重新打开终端和 OpenClaw Gateway。
+所有 worker 统一调用系统 `python.exe`。安装 Python 后把它加入 `PATH`，并确认 `python --version` 和 `python -c "from PIL import Image"` 成功即可；不需要设置项目专用 Python 环境变量，也不使用用户目录中的固定 Python 路径。安装或修改 `PATH` 后，重新打开终端和 OpenClaw Gateway。
 
 ### 数据库与本机状态
 
@@ -138,4 +131,3 @@ pwsh -NoProfile -File .\plugin\mashirobot-plugin-game-timer\block\tests\test-wor
 ```
 
 健康检查通过只证明文件、运行时和主要入口可用；仍需从微信实际发送 `help`、`状态`、`查看计划`，并分别检查图片、数据库读取和回复投递。
-

@@ -17,12 +17,8 @@ const managePlanScript = path.join(pluginRoot, "windows", "manage-plan.ps1");
 const routineReminderScript = path.join(pluginRoot, "windows", "routine-reminder.ps1");
 const CHART_CACHE_VERSION = "planner-chart-v2";
 
-function pythonExecutable(context) {
-  if (context.pythonExecutable) return context.pythonExecutable;
-  if (process.env.OPENCLAW_PYTHON_PATH) return process.env.OPENCLAW_PYTHON_PATH;
-  if (process.env.MASHIROBOT_PYTHON) return process.env.MASHIROBOT_PYTHON;
-  const local = path.join(os.homedir(), "AppData", "Local", "Python", "pythoncore-3.14-64", "python.exe");
-  return existsSync(local) ? local : "python";
+function pythonExecutable() {
+  return "python";
 }
 
 function powershellExecutable(context) {
@@ -94,7 +90,7 @@ export function createPlanRuntime(context = {}) {
 
   const runPlanner = async (args, options = {}) => {
     const result = await runner({
-      executable: pythonExecutable(context),
+      executable: pythonExecutable(),
       args: [plannerCli, ...args.map(String)],
       timeoutMs: options.timeoutMs ?? options.timeout ?? 10_000,
       env: plannerEnvironment(context),

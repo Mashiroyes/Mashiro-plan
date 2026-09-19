@@ -16,7 +16,7 @@ if (-not $SqlitePath) {
 }
 $SqlitePath = [IO.Path]::GetFullPath($SqlitePath)
 $planner = Join-Path $PluginRoot 'planner\planner.py'
-$python = if ($env:OPENCLAW_PYTHON_PATH) { $env:OPENCLAW_PYTHON_PATH } elseif ($env:MASHIROBOT_PYTHON) { $env:MASHIROBOT_PYTHON } else { Join-Path $env:LOCALAPPDATA 'Python\pythoncore-3.14-64\python.exe' }
+$python = (Get-Command python.exe -ErrorAction Stop).Source
 $openClaw = 'D:\Program\nodejs\npm_global24\openclaw.ps1'
 $account = 'ea8fd13b2100-im-bot'
 $target = 'o9cq803sh0NGK6VgYAiBKUYMnDiA@im.wechat'

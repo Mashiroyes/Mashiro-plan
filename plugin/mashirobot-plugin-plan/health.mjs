@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import os from "node:os";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -58,17 +58,14 @@ export async function collectPluginHealth(registry) {
   return Object.fromEntries(entries);
 }
 
-export function runPlanHealthChecks({ exists = existsSync, now = Date.now } = {}) {
-  const python = process.env.OPENCLAW_PYTHON_PATH
-    ?? process.env.MASHIROBOT_PYTHON
-    ?? path.join(os.homedir(), "AppData", "Local", "Python", "pythoncore-3.14-64", "python.exe");
+export function runPlanHealthChecks({ exists = existsSync, now = Date.now, runPython = spawnSync } = {}) {
+  const python = "python";
   const paths = {
     manifest: path.join(pluginRoot, "plugin.json"),
     planner: path.join(pluginRoot, "planner", "planner.py"),
     managePlan: path.join(pluginRoot, "windows", "manage-plan.ps1"),
     routineReminder: path.join(pluginRoot, "windows", "routine-reminder.ps1"),
     database: path.join(planRoot, "sqlite", "openclaw-planner.sqlite"),
-    python,
   };
   const checks = Object.fromEntries(Object.entries(paths).map(([name, target]) => [name, healthEntry({
     ok: exists(target),
@@ -76,5 +73,15 @@ export function runPlanHealthChecks({ exists = existsSync, now = Date.now } = {}
     evidence: { path: target },
     now,
   })]));
+  const pythonResult = runPython(python, ["-c", "from PIL import Image; print(Image.__version__)"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  checks.python = healthEntry({
+    ok: !pythonResult.error && pythonResult.status === 0,
+    level: "verified",
+    evidence: { command: python, output: String(pythonResult.stdout ?? "").trim() },
+    now,
+  });
   return { ok: Object.values(checks).every((entry) => entry.ok), checks, checkedAt: checkedAtValue(now) };
 }
