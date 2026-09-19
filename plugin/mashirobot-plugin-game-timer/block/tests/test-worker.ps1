@@ -12,12 +12,21 @@ try {
     $text = Get-Content -LiteralPath $fixture -Raw
     if ($text -notmatch 'rules:') { throw 'Fixture was not created.' }
     $worker = Join-Path $plugin 'powershell\BlockWorker.ps1'
+    $legacyTemplate = Join-Path $plugin 'powershell\bilibili-qq-expiry.default.json'
+    if (-not (Test-Path -LiteralPath $legacyTemplate -PathType Leaf)) { throw 'Plugin must include the legacy FocusLock state template.' }
+    $templateState = Get-Content -LiteralPath $legacyTemplate -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($templateState.QQReleased -ne $false) { throw 'Legacy FocusLock template must keep QQ blocked.' }
     $workerSource = Get-Content -LiteralPath $worker -Raw -Encoding UTF8
     if ($workerSource -notmatch '\$ClashReloadBudgetMs\s*=\s*12000') { throw 'Worker must use the bounded 12-second Clash reload budget.' }
     if ($workerSource -notmatch '\$reloadResult\.Error') { throw 'Worker must propagate the final Clash reload error.' }
     if ($workerSource -notmatch 'function Invoke-ClashHttpReload') { throw 'Worker must define the loopback HTTP reload transport.' }
     if ($workerSource -notmatch 'http://127\.0\.0\.1:9097/configs\?force=true') { throw 'Worker HTTP fallback must remain loopback-only.' }
     if ($workerSource -notmatch 'UseProxy\s*=\s*\$false') { throw 'Worker HTTP fallback must bypass configured proxies.' }
+    if ($workerSource -notmatch 'function New-LegacyFocusLockState') { throw 'Worker must define a safe legacy FocusLock state.' }
+    if ($workerSource -notmatch 'QQReleased\s*=\s*\$false') { throw 'Recovered legacy state must keep QQ blocked.' }
+    if ($workerSource -notmatch 'function Read-LegacyFocusLockState') { throw 'Worker must safely read or rebuild the legacy FocusLock state.' }
+    $installerSource = Get-Content -LiteralPath (Join-Path $plugin 'powershell\install-block.ps1') -Raw -Encoding UTF8
+    if ($installerSource -notmatch 'bilibili-qq-expiry\.default\.json') { throw 'Installer must deploy the legacy FocusLock template with the worker.' }
     $syntax = & (Get-Command pwsh.exe).Source -NoProfile -NonInteractive -File $worker -Mode Status -StateRoot $root
     if ($LASTEXITCODE -ne 0 -or $syntax -notmatch '"ok":true') { throw "Worker status failed: $syntax" }
     & $node (Join-Path $plugin 'tests\worker-fixture.mjs') $db

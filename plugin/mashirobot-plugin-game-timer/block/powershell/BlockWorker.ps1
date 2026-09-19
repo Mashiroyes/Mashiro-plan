@@ -75,6 +75,33 @@ function Save-JsonAtomic([string]$path, $value, [int]$depth = 8) {
     }
 }
 
+function New-LegacyFocusLockState {
+    $templatePath = Join-Path $PSScriptRoot 'bilibili-qq-expiry.default.json'
+    if (Test-Path -LiteralPath $templatePath -PathType Leaf) {
+        try {
+            $template = Read-JsonObject $templatePath
+            if ($null -ne $template -and $template -isnot [System.Array]) { return $template }
+        } catch {}
+    }
+    return [pscustomobject][ordered]@{
+        Status = 'Scheduled'
+        ExpiresAt = $null
+        QQReleased = $false
+        BilibiliReleaseUntil = $null
+        BilibiliClashRetained = $false
+    }
+}
+
+function Read-LegacyFocusLockState([string]$path) {
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        try {
+            $legacy = Read-JsonObject $path
+            if ($null -ne $legacy -and $legacy -isnot [System.Array]) { return $legacy }
+        } catch {}
+    }
+    return New-LegacyFocusLockState
+}
+
 function Invoke-Db([string]$dbMode) {
     if (-not $SqlitePath -or -not (Test-Path -LiteralPath $SqlitePath -PathType Leaf)) { throw "SQLite database not found: $SqlitePath" }
     $output = & $Node $DbHelper $dbMode $SqlitePath 2>&1
@@ -347,8 +374,7 @@ function Set-ClashRules($domains, $releasedDomains, $state) {
 
 function Set-LegacyBilibiliDelegation($state, [bool]$enabled) {
     $expiryPath = 'C:\ProgramData\CodexFocusLock\bilibili-qq-expiry.json'
-    if (-not (Test-Path -LiteralPath $expiryPath -PathType Leaf)) { return }
-    $legacy = Read-JsonObject $expiryPath
+    $legacy = Read-LegacyFocusLockState $expiryPath
     if ($enabled) {
         if (-not $state.LegacyBilibiliDelegated) {
             $state.LegacyBilibiliReleaseBefore = if ($legacy.PSObject.Properties['BilibiliReleaseUntil']) { [string]$legacy.BilibiliReleaseUntil } else { $null }
@@ -360,7 +386,10 @@ function Set-LegacyBilibiliDelegation($state, [bool]$enabled) {
         $legacy | Add-Member -NotePropertyName BilibiliReleaseUntil -NotePropertyValue $state.LegacyBilibiliReleaseBefore -Force
         $state.LegacyBilibiliDelegated = $false
     } else { return }
-    if (-not $DryRun) { Save-JsonAtomic $expiryPath $legacy 8 }
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $expiryPath) -Force | Out-Null
+        Save-JsonAtomic $expiryPath $legacy 8
+    }
 }
 
 function Remove-ReleasedBrowserPolicies($releasedDomains) {

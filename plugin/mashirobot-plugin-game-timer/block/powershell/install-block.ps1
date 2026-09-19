@@ -15,6 +15,8 @@ $worker = Join-Path $workerRoot 'block-worker-v2.ps1'
 $helper = Join-Path $workerRoot 'block-db-v1.mjs'
 $sourceWorker = Join-Path $PSScriptRoot 'BlockWorker.ps1'
 $sourceHelper = Join-Path $PSScriptRoot 'block-db-v1.mjs'
+$legacyTemplate = Join-Path $workerRoot 'bilibili-qq-expiry.default.json'
+$sourceLegacyTemplate = Join-Path $PSScriptRoot 'bilibili-qq-expiry.default.json'
 $reapplyTask = 'MashiroBot-mashirobot-plugin-block-Reapply'
 $scanTask = 'MashiroBot-mashirobot-plugin-block-Scan'
 $statePath = Join-Path $StateRoot 'state.json'
@@ -75,6 +77,7 @@ function Install-Block {
     New-Item -ItemType Directory -Path $workerRoot -Force | Out-Null
     Copy-Item -LiteralPath $sourceWorker -Destination $worker -Force
     Copy-Item -LiteralPath $sourceHelper -Destination $helper -Force
+    Copy-Item -LiteralPath $sourceLegacyTemplate -Destination $legacyTemplate -Force
     $state = [ordered]@{ UserProfile=$env:USERPROFILE; ClashRoot=(Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'); IfeoBackups=@(); PolicyBackups=@(); ClashManagedDomains=@(); ClashReloadPending=$false; LegacyBilibiliDelegated=$false; LegacyBilibiliReleaseBefore=$null; InstalledAt=(Get-Date).ToString('o') }
     $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding UTF8
     Remove-Tasks
