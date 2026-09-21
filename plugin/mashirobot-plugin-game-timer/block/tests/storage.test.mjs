@@ -53,3 +53,50 @@ test("batch deactivation is atomic and clears release/default state", () => {
     assert.equal(store.getDailyReleaseDefault(now), null);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test("enforces actual non-overlapping morning usage and preserves state on rejection", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-quota-"));
+  try {
+    const store = createBlockStore(path.join(root, "planner.sqlite"));
+    const first = new Date("2026-09-22T01:00:00.000Z"); // 09:00 Shanghai
+    const accepted = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T01:10:00.000Z" }, first);
+    assert.equal(accepted.allowed, true);
+    const reset = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T01:15:00.000Z" }, new Date("2026-09-22T01:05:00.000Z"));
+    assert.equal(reset.allowed, true);
+    assert.equal(reset.quota.periods[0].usedMinutes, 5);
+    assert.equal(reset.quota.periods[0].addedMinutes, 10);
+    const rejected = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T01:26:00.000Z" }, new Date("2026-09-22T01:15:00.000Z"));
+    assert.equal(rejected.allowed, false);
+    assert.equal(store.listReleases(new Date("2026-09-22T01:14:00.000Z"))[0].expiresAt, "2026-09-22T01:15:00.000Z");
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("early restore charges elapsed time and websites have independent quotas", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-quota-"));
+  try {
+    const store = createBlockStore(path.join(root, "planner.sqlite"));
+    const start = new Date("2026-09-22T01:00:00.000Z");
+    assert.equal(store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T01:20:00.000Z" }, start).allowed, true);
+    assert.equal(store.restoreRelease("bilibili.com", new Date("2026-09-22T01:05:00.000Z")), true);
+    const bilibili = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T01:20:00.000Z" }, new Date("2026-09-22T01:05:00.000Z"));
+    assert.equal(bilibili.allowed, true);
+    assert.equal(bilibili.quota.periods[0].remainingMinutes, 0);
+    const zhihu = store.tryRelease({ targetKey: "zhihu.com", displayName: "zhihu.com", expiresAt: "2026-09-22T01:25:00.000Z" }, new Date("2026-09-22T01:05:00.000Z"));
+    assert.equal(zhihu.allowed, true);
+    assert.equal(zhihu.quota.periods[0].remainingMinutes, 0);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("splits cross-period quota and deletion clears history", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-quota-"));
+  try {
+    const store = createBlockStore(path.join(root, "planner.sqlite"));
+    const now = new Date("2026-09-22T03:50:00.000Z"); // 11:50 Shanghai
+    store.upsert({ kind: "website", targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: null }, now);
+    const result = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T04:10:00.000Z" }, now);
+    assert.deepEqual(result.quota.periods.map((period) => period.addedMinutes), [10, 10]);
+    assert.equal(store.deactivateMany([{ kind: "website", targetKey: "bilibili.com" }], new Date("2026-09-22T03:55:00.000Z")).changes, 1);
+    const fresh = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T04:15:00.000Z" }, new Date("2026-09-22T04:00:00.000Z"));
+    assert.equal(fresh.quota.periods[0].usedMinutes, 0);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

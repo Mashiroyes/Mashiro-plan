@@ -18,7 +18,19 @@ db.exec(`
     display_name TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS block_release_intervals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_key TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_block_release_intervals_target_time ON block_release_intervals(target_key,start_at,end_at);
 `);
+const releaseColumns = db.prepare("PRAGMA table_info(block_releases)").all();
+if (!releaseColumns.some((column) => column.name === "interval_id")) db.exec("ALTER TABLE block_releases ADD COLUMN interval_id INTEGER");
 try {
   const now = new Date().toISOString();
   if (mode === "active") {
@@ -42,6 +54,7 @@ try {
   } else if (mode === "expire") {
     const rules = db.prepare("UPDATE block_rules SET active=0,updated_at=? WHERE active=1 AND expires_at IS NOT NULL AND expires_at<=?").run(now, now).changes;
     const releases = db.prepare("DELETE FROM block_releases WHERE expires_at<=?").run(now).changes;
+    db.prepare("DELETE FROM block_release_intervals WHERE end_at<?").run(new Date(Date.now() - 9 * 86_400_000).toISOString());
     process.stdout.write(JSON.stringify({ ok: true, expiredRules: rules, expiredReleases: releases }));
   } else {
     throw new Error(`unknown mode: ${mode}`);
