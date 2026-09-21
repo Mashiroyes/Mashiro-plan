@@ -66,6 +66,55 @@ test("plain release defaults to bilibili on a new Shanghai day", async () => {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test("rejects a release that exceeds the website morning quota without syncing", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-quota-plugin-"));
+  try {
+    const calls = [];
+    const context = {
+      sqlitePath: path.join(root, "planner.sqlite"), now: new Date("2026-09-22T01:00:00Z"),
+      blockSyncer: { async apply(args) { calls.push(args); return { ok: true }; } },
+    };
+    await plugin.handle("禁止访问bilibili.com永久", context);
+    assert.match((await plugin.handle("解除bilibili20分钟", context)).reply, /上午剩余 0 分钟/u);
+    const callsAfterAccepted = calls.length;
+    context.now = new Date("2026-09-22T01:20:00Z");
+    const rejected = await plugin.handle("解除bilibili1分钟", context);
+    assert.match(rejected.reply, /无法解除/u);
+    assert.match(rejected.reply, /上午剩余 0 分钟/u);
+    assert.equal(calls.length, callsAfterAccepted);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("reports separate remaining quotas for a cross-period release", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-quota-plugin-"));
+  try {
+    const context = {
+      sqlitePath: path.join(root, "planner.sqlite"), now: new Date("2026-09-22T03:50:00Z"),
+      blockSyncer: { async apply() { return { ok: true }; } },
+    };
+    await plugin.handle("禁止访问bilibili.com永久", context);
+    const reply = (await plugin.handle("解除bilibili20分钟", context)).reply;
+    assert.match(reply, /上午剩余 10 分钟/u);
+    assert.match(reply, /下午剩余 20 分钟/u);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("immediate restore stops quota usage at the restore time", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-quota-plugin-"));
+  try {
+    const context = {
+      sqlitePath: path.join(root, "planner.sqlite"), now: new Date("2026-09-22T01:00:00Z"),
+      blockSyncer: { async apply() { return { ok: true }; } },
+    };
+    await plugin.handle("禁止访问bilibili.com永久", context);
+    await plugin.handle("解除bilibili20分钟", context);
+    context.now = new Date("2026-09-22T01:05:00Z");
+    await plugin.handle("立即恢复bilibili", context);
+    const reply = (await plugin.handle("解除bilibili15分钟", context)).reply;
+    assert.match(reply, /上午剩余 0 分钟/u);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test("block-rule deletion uses unified numbering and requires confirmation", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-delete-plugin-"));
   try {
