@@ -1,5 +1,7 @@
 import { createMashiroBotRuntime } from "./runtime/mashirobot-runtime.mjs";
 import { createLocalControlServer } from "./local-ui/server.mjs";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 let startupState = "booting";
 let startupError = null;
@@ -18,7 +20,13 @@ function getRuntime() {
     runtime = created;
     pluginRegistry = created.registry;
     if (process.env.MASHIROBOT_LOCAL_UI !== "0") {
-      try { localControlServer = await createLocalControlServer({ handleMessage: created.handleMessage }); }
+      try {
+        localControlServer = await createLocalControlServer({ handleMessage: created.handleMessage });
+        const urlFile = path.join(process.env.TEMP || ".", "MashiroBot", "local-control-url.txt");
+        await fs.mkdir(path.dirname(urlFile), { recursive: true });
+        await fs.writeFile(urlFile, `${localControlServer.url}\n`, "utf8");
+        console.info(`[MashiroBot] local control console: ${localControlServer.url}`);
+      }
       catch (error) { startupError = `本地控制台启动失败：${error.message}`; }
     }
     startupState = created.getStatus().state;
