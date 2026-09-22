@@ -1,8 +1,10 @@
 import { createMashiroBotRuntime } from "./runtime/mashirobot-runtime.mjs";
+import { createLocalControlServer } from "./local-ui/server.mjs";
 
 let startupState = "booting";
 let startupError = null;
 let runtime = null;
+let localControlServer = null;
 export let pluginRegistry = null;
 
 function shortError(error) {
@@ -12,9 +14,13 @@ function shortError(error) {
 let runtimePromise = null;
 
 function getRuntime() {
-  runtimePromise ??= createMashiroBotRuntime().then((created) => {
+  runtimePromise ??= createMashiroBotRuntime().then(async (created) => {
     runtime = created;
     pluginRegistry = created.registry;
+    if (process.env.MASHIROBOT_LOCAL_UI !== "0") {
+      try { localControlServer = await createLocalControlServer({ handleMessage: created.handleMessage }); }
+      catch (error) { startupError = `本地控制台启动失败：${error.message}`; }
+    }
     startupState = created.getStatus().state;
     return created;
   }).catch((error) => {
@@ -43,7 +49,10 @@ export function getMashiroBotStartupStatus() {
 export async function shutdownMashiroBot() {
   if (!runtimePromise) return { ok: true, failures: [] };
   const activeRuntime = await runtimePromise;
+  if (localControlServer) { await localControlServer.close(); localControlServer = null; }
   return activeRuntime ? activeRuntime.shutdown() : { ok: true, failures: [] };
 }
+
+export function getLocalControlServer() { return localControlServer; }
 
 export { createMashiroBotRuntime };
