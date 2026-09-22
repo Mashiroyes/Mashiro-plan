@@ -30,10 +30,14 @@ export async function createLocalControlServer({ handleMessage, host = "127.0.0.
       if (request.method === "GET" && url.pathname === "/media") {
         if (!tokenMatches(request, token)) { response.writeHead(401); response.end("Unauthorized"); return; }
         const requested = path.resolve(String(url.searchParams.get("path") || ""));
-        if (!requested.startsWith(`${mediaRoot}${path.sep}`)) { response.writeHead(403); response.end("Forbidden"); return; }
-        const extension = path.extname(requested).toLowerCase();
+        let realRequested;
+        let realRoot;
+        try { realRequested = await fs.realpath(requested); realRoot = await fs.realpath(mediaRoot); }
+        catch { response.writeHead(404); response.end("Not found"); return; }
+        if (!realRequested.toLowerCase().startsWith(`${realRoot.toLowerCase()}${path.sep}`)) { response.writeHead(403); response.end("Forbidden"); return; }
+        const extension = path.extname(realRequested).toLowerCase();
         if (!mediaTypes[extension]) { response.writeHead(415); response.end("Unsupported media type"); return; }
-        const data = await fs.readFile(requested);
+        const data = await fs.readFile(realRequested);
         response.writeHead(200, { "content-type": mediaTypes[extension], "cache-control": "no-store" });
         response.end(data);
         return;
