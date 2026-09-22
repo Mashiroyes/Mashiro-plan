@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { createLocalControlServer } from "../core/local-ui/server.mjs";
 
 test("local control server routes commands and requires its token", async () => {
@@ -15,5 +17,13 @@ test("local control server routes commands and requires its token", async () => 
     assert.equal(response.status, 200);
     assert.equal((await response.json()).reply, "ok:帮助");
     assert.deepEqual(calls[0].context, { source: "local-ui", accountId: "local", conversationId: "local" });
+    const mediaRoot = path.resolve(process.env.TEMP, "MashiroBot", "outbound");
+    const mediaPath = path.join(mediaRoot, "local-ui-test.png");
+    await fs.mkdir(mediaRoot, { recursive: true });
+    await fs.writeFile(mediaPath, Buffer.from([137, 80, 78, 71]));
+    const media = await fetch(`http://${server.host}:${server.port}/media?path=${encodeURIComponent(mediaPath)}&token=${server.token}`);
+    assert.equal(media.status, 200);
+    assert.equal(media.headers.get("content-type"), "image/png");
+    await fs.rm(mediaPath, { force: true });
   } finally { await server.close(); }
 });

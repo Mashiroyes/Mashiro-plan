@@ -6,6 +6,8 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const pagePath = path.join(directory, "index.html");
+const mediaRoot = path.resolve(process.env.TEMP || path.join(process.cwd(), "temp"), "MashiroBot", "outbound");
+const mediaTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
 
 function tokenMatches(request, token) {
   const supplied = request.headers["x-mashiro-token"] ?? new URL(request.url, "http://127.0.0.1").searchParams.get("token") ?? "";
@@ -23,6 +25,17 @@ export async function createLocalControlServer({ handleMessage, host = "127.0.0.
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
         response.end(html.replaceAll("__MASHIRO_TOKEN__", token));
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/media") {
+        if (!tokenMatches(request, token)) { response.writeHead(401); response.end("Unauthorized"); return; }
+        const requested = path.resolve(String(url.searchParams.get("path") || ""));
+        if (!requested.startsWith(`${mediaRoot}${path.sep}`)) { response.writeHead(403); response.end("Forbidden"); return; }
+        const extension = path.extname(requested).toLowerCase();
+        if (!mediaTypes[extension]) { response.writeHead(415); response.end("Unsupported media type"); return; }
+        const data = await fs.readFile(requested);
+        response.writeHead(200, { "content-type": mediaTypes[extension], "cache-control": "no-store" });
+        response.end(data);
         return;
       }
       if (!tokenMatches(request, token)) {
