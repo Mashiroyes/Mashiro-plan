@@ -35,6 +35,17 @@ function readGames(context) {
 function reply(text, command = "游戏计时") { return { handled: true, command, reply: text, mediaPaths: [] }; }
 function formatAt(value) { return new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "short", timeStyle: "medium" }).format(new Date(value)); }
 
+function chooseActiveTimer(store, shortId, now) {
+  const active = store.listActive(now);
+  if (shortId) {
+    const target = active.find((task) => task.shortId?.toUpperCase() === shortId.toUpperCase());
+    return target ? { target, active } : { error: `没有找到活动计时 ${shortId}。`, active };
+  }
+  if (active.length === 1) return { target: active[0], active };
+  if (!active.length) return { error: "当前没有活动游戏计时。", active };
+  return { error: `当前有 ${active.length} 个活动计时，请指定编号：${active.map((task) => task.shortId).join("、")}。`, active };
+}
+
 function formatExistingQqSession(session) {
   if (session.phase === "preparing" || !session.playEndsAt) return "QQ正在准备中，请不要重复发送指令。";
   const label = session.phase === "playing" ? "QQ正在限时使用中" : "QQ正在冷却中";
@@ -132,6 +143,7 @@ export async function handle(message, context = {}) {
     if (pending.actionKind === "games") {
       const removed = removeGamesFromConfig(configPath(context), pending.payload.keys ?? []);
       refreshAuditTargets(context, readGames(context));
+      context.undoManager?.record({ scope: `${context.accountId ?? "global"}:${context.conversationId ?? "global"}`, owner: "mashirobot-plugin-game-timer", actionKind: "game-config-delete", description: `删除游戏清单 ${removed.map((game) => game.displayName).join("、")}`, reversible: false, recoveryCommand: "重新发送“加入游戏”并粘贴原 exe 路径" });
       return reply(`已从游戏清单删除 ${removed.length} 项：${removed.map((game) => game.displayName).join("、") || "无"}。已启动的计时不会受影响。`, "删除游戏");
     }
     return reply("待删除操作无法识别，未执行。", "确认删除");
@@ -177,6 +189,51 @@ export async function handle(message, context = {}) {
   if (!command) throw new Error("无法解析游戏计时命令");
 
   const configs = readGames(context);
+  const now = context.now ?? new Date();
+  const databasePath = sqlitePath(context);
+  const timerStore = context.gameTimerStore ?? createGameTimerStore(databasePath);
+  const timerScheduler = context.gameTimerScheduler ?? createScheduler({ pluginRoot, sqlitePath: databasePath, runLocalProcess: context.runLocalProcess });
+  if (command.kind === "timerList") {
+    const active = timerStore.listActive(now);
+    return reply(active.length ? active.map((task) => `${task.shortId} ${task.displayName}：提醒 ${formatAt(task.reminderAt)}，强退 ${formatAt(task.forceAt)}`).join("\n") : "当前没有活动游戏计时。", "查询游戏计时");
+  }
+  if (["timerCancel", "timerExtend", "timerEnd"].includes(command.kind)) {
+    const selected = chooseActiveTimer(timerStore, command.shortId, now);
+    if (!selected.target) return reply(selected.error, "游戏计时控制");
+    const target = selected.target;
+    if (command.kind === "timerCancel") {
+      await timerScheduler.remove(target);
+      timerStore.cancel(target.id, new Date(now).toISOString());
+      return reply(`已取消 ${target.shortId} ${target.displayName} 的提醒和强退任务。`, "取消游戏计时");
+    }
+    if (command.kind === "timerExtend") {
+      await timerScheduler.remove(target);
+      const extended = timerStore.extend(target.id, command.minutes, new Date(now).toISOString());
+      if (!extended) return reply("计时状态已经变化，未执行延长。", "延长游戏计时");
+      try {
+        const scheduled = await timerScheduler.schedule(extended);
+        timerStore.activate(extended.id, scheduled, new Date(now).toISOString());
+        return reply(`已将 ${extended.shortId} ${extended.displayName} 延长 ${command.minutes} 分钟。\n提醒：${formatAt(extended.reminderAt)}\n强退：${formatAt(extended.forceAt)}`, "延长游戏计时");
+      } catch (error) {
+        timerStore.fail(extended.id, error.message);
+        return reply(`延长后的 Windows 任务创建失败，计时已停止：${error.message}`, "延长游戏计时");
+      }
+    }
+    await timerScheduler.remove(target);
+    try {
+      await timerScheduler.forceNow(target);
+      context.undoManager?.record({ scope: `${context.accountId ?? "global"}:${context.conversationId ?? "global"}`, owner: "mashirobot-plugin-game-timer", actionKind: "force-end", description: `立即结束 ${target.shortId} ${target.displayName}`, reversible: false, recoveryCommand: "发送“恢复所有游戏文件”" });
+      return reply(`已立即结束 ${target.shortId} ${target.displayName} 的计时，并执行关闭流程。`, "立即结束游戏计时");
+    } catch (error) {
+      return reply(`立即结束执行失败：${error.message}`, "立即结束游戏计时");
+    }
+  }
+  if (command.kind === "recoverAllGames") {
+    const completed = await (context.runLocalProcess ?? (async (options) => (await import("../../core/execution/local-process.mjs")).runLocalProcess(options)))({
+      executable: "schtasks.exe", args: ["/Run", "/TN", "MashiroBot-GameLocker-RecoverAll"], timeoutMs: 15_000, output: "text",
+    });
+    return reply(`已启动最高权限的游戏文件恢复检查。${completed?.stdout ? "" : "恢复在后台继续执行。"}`, "恢复所有游戏文件");
+  }
   if (command.kind === "add") {
     const result = addGameToConfig(configPath(context), command.executablePath);
     refreshAuditTargets(context, readGames(context));
@@ -195,23 +252,29 @@ export async function handle(message, context = {}) {
   }
   const game = findConfiguredGame(command.game, configs);
   if (!game) throw new Error(`游戏未加入清单：${command.game}。请先发送“加入游戏”并提供 exe 路径。`);
-  const now = context.now ?? new Date();
   const protectedRecord = createGameVaultStore(sqlitePath(context)).hasProtectedGame(game.key);
   if (protectedRecord) {
     const due = protectedRecord.restoreDueAt ? `，预计恢复：${formatAt(protectedRecord.restoreDueAt)}` : "";
     return reply(`游戏启动文件仍在保护中，不能开始计时${due}。`, "游戏保护");
   }
   const task = buildTask({ game, minutes: command.minutes, forceAfter: command.forceAfter, now });
-  const store = createGameTimerStore(sqlitePath(context));
+  const store = timerStore;
   const pending = store.createPending(task);
   if (!pending.created) {
     return reply(`真白，${pending.task.displayName}已有计时任务，当前任务不会被覆盖。\n提醒：${formatAt(pending.task.reminderAt)}\n强退：${formatAt(pending.task.forceAt)}\n解锁：${formatAt(pending.task.lockUntil)}`);
   }
-  const scheduler = context.gameTimerScheduler ?? createScheduler({ pluginRoot, sqlitePath: sqlitePath(context), runLocalProcess: context.runLocalProcess });
+  const scheduler = timerScheduler;
   try {
     const scheduled = await scheduler.schedule(task);
     store.activate(task.id, scheduled, new Date(now).toISOString());
-    return reply(`已设置 ${game.displayName}：\n${formatAt(task.reminderAt)} 微信提醒关闭\n${formatAt(task.forceAt)} 未关闭则强退\n${formatAt(task.lockUntil)} 后允许重新设置。`);
+    const saved = store.get(task.id);
+    context.undoManager?.record({
+      scope: `${context.accountId ?? "global"}:${context.conversationId ?? "global"}`,
+      owner: "mashirobot-plugin-game-timer", actionKind: "game-timer",
+      description: `${saved.shortId} ${game.displayName} 游戏计时`,
+      inversePayload: { id: saved.id, reminderTaskName: saved.reminderTaskName, forceTaskName: saved.forceTaskName },
+    });
+    return reply(`已设置 ${saved.shortId} ${game.displayName}：\n${formatAt(task.reminderAt)} 微信提醒关闭\n${formatAt(task.forceAt)} 未关闭则强退\n${formatAt(task.lockUntil)} 后允许重新设置。\n可发送“取消 ${saved.shortId}”“延长 ${saved.shortId} 30分钟”或“立即结束 ${saved.shortId}”。`);
   } catch (error) {
     let recoveryError = null;
     try { await scheduler.remove({ reminderTaskName: null, forceTaskName: null }); } catch (failure) { recoveryError = failure; }
@@ -259,7 +322,8 @@ export function getHelp() {
           "同一游戏在锁定期内不能覆盖或重新设置",
           "所有被插件实际强退的游戏都会把 EXE 随机改名并保护2小时",
           "只关闭进程名和完整路径都匹配的游戏，不关闭 Steam",
-          "微信端不提供取消计时指令",
+          "查询游戏计时；取消游戏计时/取消 G编号；延长 G编号 30分钟；立即结束 G编号",
+          "恢复所有游戏文件：启动最高权限恢复任务，不受游戏禁止规则限制",
         ],
       },
     ],

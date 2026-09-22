@@ -5,6 +5,10 @@ import { parseBlockCommand, getExpiry, getReleaseExpiry } from "./core/parser.mj
 import { createBlockStore } from "./core/storage.mjs";
 import { createBlockSyncer } from "./core/syncer.mjs";
 import { createPendingDeleteStore } from "../core/pending-delete-storage.mjs";
+import { randomUUID } from "node:crypto";
+import { applyControlMigrations, openControlDatabase } from "../../../core/control/database.mjs";
+import { classifyBlockRisk } from "./core/protected-targets.mjs";
+import { createOperationJournal } from "../../../core/control/operation-journal.mjs";
 
 const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
 const TASK_NAME = "MashiroBot-mashirobot-plugin-block-Reapply";
@@ -28,10 +32,70 @@ function formatQuotaRemaining(periods) {
   return periods.map((period) => `${period.label}剩余 ${wholeRemaining(period.remainingMinutes)} 分钟`).join("，");
 }
 
-export function match(message) { return parseBlockCommand(message) !== null; }
+const CONFIRM_BLOCK = /^确认禁止\s+(B[0-9A-F]{3})$/iu;
+export function match(message) { return CONFIRM_BLOCK.test(String(message ?? "").trim()) || parseBlockCommand(message) !== null; }
+
+function savePendingHighRisk(sqlitePath, command, impact, now) {
+  const db = openControlDatabase(sqlitePath);
+  try {
+    applyControlMigrations(db);
+    let actionId;
+    do { actionId = `B${randomUUID().replaceAll("-", "").slice(0, 3).toUpperCase()}`; }
+    while (db.prepare("SELECT 1 FROM pending_high_risk_actions WHERE action_id=?").get(actionId));
+    const createdAt = new Date(now).toISOString();
+    const expiresAt = new Date(new Date(now).getTime() + 10 * 60_000).toISOString();
+    db.prepare("INSERT INTO pending_high_risk_actions(action_id,owner,action_kind,payload_json,impact_summary,expires_at,created_at) VALUES(?, 'mashirobot-plugin-game-timer', 'block-rule', ?, ?, ?, ?)")
+      .run(actionId, JSON.stringify(command), impact, expiresAt, createdAt);
+    return { actionId, expiresAt };
+  } finally { db.close(); }
+}
+
+function consumePendingHighRisk(sqlitePath, actionId, now) {
+  const db = openControlDatabase(sqlitePath);
+  try {
+    applyControlMigrations(db);
+    db.prepare("DELETE FROM pending_high_risk_actions WHERE expires_at<=?").run(new Date(now).toISOString());
+    const row = db.prepare("SELECT * FROM pending_high_risk_actions WHERE action_id=? AND owner='mashirobot-plugin-game-timer' AND action_kind='block-rule'").get(actionId);
+    if (!row) return null;
+    db.prepare("DELETE FROM pending_high_risk_actions WHERE action_id=?").run(actionId);
+    return { command: JSON.parse(row.payload_json), impact: row.impact_summary };
+  } finally { db.close(); }
+}
+
+async function applyWithJournal(syncer, sqlitePath, { targetKey, kind, payload }, now) {
+  const journal = createOperationJournal(sqlitePath, { now: () => new Date(now) });
+  const operation = journal.prepare({ owner: "mashirobot-plugin-game-timer", kind, targetKey, ruleId: targetKey });
+  journal.transition(operation.operationId, "applying");
+  try {
+    const resultValue = await syncer.apply(payload);
+    journal.transition(operation.operationId, "applied");
+    return resultValue;
+  } catch (error) {
+    journal.transition(operation.operationId, "failed", { error: error.message });
+    throw error;
+  }
+}
+
+async function applyBlockRule(command, context, now) {
+  const store = createBlockStore(context.sqlitePath);
+  const syncer = context.blockSyncer ?? createBlockSyncer({ taskName: context.blockTaskName ?? TASK_NAME, runLocalProcess: context.runLocalProcess });
+  const row = store.upsert({ kind: command.ruleKind, targetKey: command.targetKey, displayName: command.displayName, expiresAt: getExpiry(command, now) }, now);
+  let syncResult;
+  try { syncResult = await applyWithJournal(syncer, store.sqlitePath, { targetKey: row.targetKey, kind: "block-sync", payload: { sqlitePath: store.sqlitePath, row } }, now); }
+  catch (error) { return result(`已保存禁止规则：${row.displayName}（${formatExpiry(row)}），但系统同步失败：${error.message}\n请先安装禁止名单 worker。`, "设置禁止名单"); }
+  if (syncResult?.scheduled) return result(`已保存禁止规则：${row.displayName}（${formatExpiry(row)}）。系统任务会在 1 分钟内同步；Clash 开启或关闭时都会继续阻止。`, "设置禁止名单");
+  return result(`已生效：${row.displayName}（${formatExpiry(row)}）。Clash 开启或关闭时都会继续阻止。`, "设置禁止名单");
+}
 
 export async function handle(message, context = {}) {
-  const command = parseBlockCommand(message, context.now ?? new Date());
+  const now = context.now ?? new Date();
+  const confirm = CONFIRM_BLOCK.exec(String(message ?? "").trim());
+  if (confirm) {
+    const pending = consumePendingHighRisk(context.sqlitePath, confirm[1].toUpperCase(), now);
+    if (!pending) return result("没有找到该待确认规则，或者确认已超过10分钟。", "确认禁止");
+    return applyBlockRule(pending.command, context, now);
+  }
+  const command = parseBlockCommand(message, now);
   if (!command) throw new Error("无法解析禁止名单指令。");
   if (command.kind === "help") return await context.renderPluginHelp?.("mashirobot-plugin-game-timer", { detailed: command.detailed }) ?? result("禁止名单：禁止下载QQ7天；禁止访问baidu.com永久；查询禁止名单。", "禁止名单帮助");
   const store = createBlockStore(context.sqlitePath);
@@ -49,7 +113,6 @@ export async function handle(message, context = {}) {
     pending.save("blockRules", { items: items.map(({ kind, targetKey, displayName }) => ({ kind, targetKey, displayName })) }, now);
     return result(`准备删除以下禁止规则：\n${items.map((row) => `- ${row.displayName}`).join("\n")}\n请在10分钟内发送“确认删除”。`, "删除禁止规则");
   }
-  const now = context.now ?? new Date();
   const syncer = context.blockSyncer ?? createBlockSyncer({ taskName: context.blockTaskName ?? TASK_NAME, runLocalProcess: context.runLocalProcess });
   if (command.kind === "release") {
     let targetKey = command.targetKey;
@@ -69,7 +132,7 @@ export async function handle(message, context = {}) {
     if (command.explicit) store.setDailyReleaseDefault(targetKey, displayName, now);
     const release = releaseResult.release;
     try {
-      await syncer.apply({ sqlitePath: store.sqlitePath, release });
+      await applyWithJournal(syncer, store.sqlitePath, { targetKey, kind: "block-release-sync", payload: { sqlitePath: store.sqlitePath, release } }, now);
       return result(`已临时解除 ${displayName}，至 ${formatAt(release.expiresAt)}。到期后会自动恢复禁止。\n额度：${formatQuotaRemaining(releaseResult.quota.periods)}。\n今天“解除N分钟”的默认网站：${store.getDailyReleaseDefault(now)?.displayName ?? "bilibili.com"}`, "临时解除网站");
     } catch (error) {
       return result(`已保存 ${displayName} 的临时解除时段，但系统同步失败：${error.message}`, "临时解除网站");
@@ -79,21 +142,19 @@ export async function handle(message, context = {}) {
     const removed = store.restoreRelease(command.targetKey, now);
     if (!removed) return result(`${command.displayName} 当前没有临时解除。`, "恢复网站禁止");
     try {
-      await syncer.apply({ sqlitePath: store.sqlitePath });
+      await applyWithJournal(syncer, store.sqlitePath, { targetKey: command.targetKey, kind: "block-restore-sync", payload: { sqlitePath: store.sqlitePath } }, now);
       return result(`已提前结束 ${command.displayName} 的临时解除，并恢复禁止。`, "恢复网站禁止");
     } catch (error) {
       return result(`已结束 ${command.displayName} 的临时解除，但系统同步失败：${error.message}`, "恢复网站禁止");
     }
   }
-  const row = store.upsert({ kind: command.ruleKind, targetKey: command.targetKey, displayName: command.displayName, expiresAt: getExpiry(command, now) }, now);
-  let syncResult;
-  try {
-    syncResult = await syncer.apply({ sqlitePath: store.sqlitePath, row });
-  } catch (error) {
-    return result(`已保存禁止规则：${row.displayName}（${formatExpiry(row)}），但系统同步失败：${error.message}\n请先安装禁止名单 worker。`, "设置禁止名单");
+  const risk = classifyBlockRisk(command);
+  if (risk.decision === "reject") return result(`未执行：${risk.impact}`, "设置禁止名单");
+  if (risk.decision === "confirm") {
+    const pending = savePendingHighRisk(store.sqlitePath, command, risk.impact, now);
+    return result(`${risk.impact}\n如确认执行，请在10分钟内发送“确认禁止 ${pending.actionId}”。`, "确认高风险禁止");
   }
-  if (syncResult?.scheduled) return result(`已保存禁止规则：${row.displayName}（${formatExpiry(row)}）。系统任务会在 1 分钟内同步；Clash 开启或关闭时都会继续阻止。`, "设置禁止名单");
-  return result(`已生效：${row.displayName}（${formatExpiry(row)}）。Clash 开启或关闭时都会继续阻止。`, "设置禁止名单");
+  return applyBlockRule(command, context, now);
 }
 
 export async function confirmDeleteRules(payload, context = {}) {
@@ -103,7 +164,8 @@ export async function confirmDeleteRules(payload, context = {}) {
   const syncer = context.blockSyncer ?? createBlockSyncer({ taskName: context.blockTaskName ?? TASK_NAME, runLocalProcess: context.runLocalProcess });
   const names = (payload.items ?? []).map((item) => item.displayName).join("、");
   try {
-    await syncer.apply({ sqlitePath: store.sqlitePath });
+    await applyWithJournal(syncer, store.sqlitePath, { targetKey: "deleted-rules", kind: "block-delete-sync", payload: { sqlitePath: store.sqlitePath } }, now);
+    context.undoManager?.record({ scope: `${context.accountId ?? "global"}:${context.conversationId ?? "global"}`, owner: "mashirobot-plugin-game-timer", actionKind: "block-delete", description: `删除禁止规则 ${names}`, reversible: false, recoveryCommand: "按原命令重新添加对应禁止规则" });
     return result(`已删除 ${deletion.changes} 条禁止规则：${names || "无"}。系统限制已同步移除。`, "删除禁止规则");
   } catch (error) {
     return result(`已从禁止名单删除 ${deletion.changes} 条规则，但系统同步失败：${error.message}`, "删除禁止规则");

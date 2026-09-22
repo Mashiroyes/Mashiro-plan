@@ -38,7 +38,7 @@ mashirobot-plugin-example/
 
 - `schemaVersion` 必须严格等于 `1`。
 - `id`、`name`、`version`、`description` 必须为非空字符串；`id` 必须与目录名完全一致。
-- `menuIndex` 必须为大于 `0` 的整数并在已启用插件中唯一。
+- 已启用插件的 `menuIndex` 必须为大于 `0` 的整数并唯一。禁用插件可省略该字段，且不占用任何菜单编号；如填写，仍必须为正整数。
 - `priority` 必须为有限数值。优先级高者先匹配；相同优先级按插件 ID 稳定排序。
 - `enabled` 必须为布尔值。值为 `false` 时不导入入口、不进入菜单或路由。
 - `entry` 必须是插件目录内的相对文件路径，禁止绝对路径和路径穿越。

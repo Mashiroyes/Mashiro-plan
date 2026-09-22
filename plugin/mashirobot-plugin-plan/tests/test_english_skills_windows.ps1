@@ -8,6 +8,8 @@ $installer = Join-Path $pluginRoot 'windows\install-english-skills.ps1'
 $worker = Join-Path $pluginRoot 'windows\english-skills-worker.ps1'
 [IO.Directory]::CreateDirectory($tempRoot) | Out-Null
 try {
+    $currentMonth = (& pwsh -NoProfile -File $worker -PluginRoot $pluginRoot -SqlitePath $db -Now '2026-09-22T10:00:00+08:00' -PeriodType current-month -DryRun | ConvertFrom-Json)
+    if ($currentMonth.duePeriods.Count -ne 1 -or $currentMonth.duePeriods[0].fromDate -ne '2026-09-01' -or $currentMonth.duePeriods[0].toDate -ne '2026-09-22' -or $currentMonth.duePeriods[0].periodKey -ne 'month-to-date:2026-09-22') { throw 'Current-month daily range is incorrect.' }
     $year = (& pwsh -NoProfile -File $worker -PluginRoot $pluginRoot -SqlitePath $db -Now '2027-01-01T11:00:00+08:00' -DryRun | ConvertFrom-Json)
     if ($year.duePeriods.Count -ne 2 -or @($year.duePeriods.periodType) -notcontains 'month' -or @($year.duePeriods.periodType) -notcontains 'year') { throw 'January 1 due periods are incorrect.' }
     foreach ($result in $year.results) { if ($result.action -ne 'dry-run' -or -not (Test-Path -LiteralPath $result.mediaPath)) { throw 'Dry-run did not render each due chart.' } }
@@ -20,15 +22,20 @@ try {
     $yearlyCatchup = (& pwsh -NoProfile -File $worker -PluginRoot $pluginRoot -SqlitePath $db -Now '2027-01-02T11:00:00+08:00' -PeriodType year -DryRun | ConvertFrom-Json)
     if ($yearlyCatchup.duePeriods.Count -ne 1 -or $yearlyCatchup.duePeriods[0].fromDate -ne '2026-01-01' -or $yearlyCatchup.duePeriods[0].toDate -ne '2026-12-31') { throw 'Yearly catch-up range is incorrect.' }
     $installed = (& pwsh -NoProfile -File $installer -Action Install -SourcePluginRoot $pluginRoot -SqlitePath $db -RuntimeBase $runtime -TaskSuffix $suffix | ConvertFrom-Json)
-    if ($installed.inspection.tasks.Count -ne 3 -or @($installed.inspection.tasks | Where-Object { -not $_.exists -or $_.state -ne 'Ready' }).Count -ne 0) { throw 'Installed calendar tasks were not verified.' }
+    if ($installed.inspection.tasks.Count -ne 4 -or @($installed.inspection.tasks | Where-Object { -not $_.exists -or $_.state -ne 'Ready' }).Count -ne 0) { throw 'Installed calendar tasks were not verified.' }
     if ($installed.inspection.legacyTaskExists) { throw 'Legacy daily task remains after installation.' }
-    if ($installed.inspection.tasks[0].triggerClass -ne 'MSFT_TaskWeeklyTrigger' -or $installed.inspection.tasks[0].xml -notmatch '<Monday') { throw 'Installed weekly trigger is incorrect.' }
-    if ($installed.inspection.tasks[1].xml -notmatch '<December' -or $installed.inspection.tasks[2].xml -match '<February') { throw 'Installed monthly or yearly calendar trigger is incorrect.' }
+    $dailyTask = $installed.inspection.tasks[0]
+    $dailyClassOk = $dailyTask.triggerClass -eq 'MSFT_TaskDailyTrigger'
+    $dailyHourOk = ([datetimeoffset]$dailyTask.startBoundary).Hour -eq 10
+    $dailyIntervalOk = ([string]$dailyTask.xml).Contains('<DaysInterval>1</DaysInterval>')
+    if (-not ($dailyClassOk -and $dailyHourOk -and $dailyIntervalOk)) { throw ("Installed daily current-month trigger is incorrect: class=$dailyClassOk hour=$dailyHourOk interval=$dailyIntervalOk " + ($dailyTask | ConvertTo-Json -Compress -Depth 5)) }
+    if ($installed.inspection.tasks[1].triggerClass -ne 'MSFT_TaskWeeklyTrigger' -or $installed.inspection.tasks[1].xml -notmatch '<Monday') { throw 'Installed weekly trigger is incorrect.' }
+    if ($installed.inspection.tasks[2].xml -notmatch '<December' -or $installed.inspection.tasks[3].xml -match '<February') { throw 'Installed monthly or yearly calendar trigger is incorrect.' }
     $installedPlugin = Join-Path $installed.runtimeRoot 'plugin'
     $launcher = Join-Path $installedPlugin 'windows\run-hidden-worker.vbs'
     $installedWorker = Join-Path $installedPlugin 'windows\english-skills-worker.ps1'
     $pwshPath = (Get-Command pwsh.exe -ErrorAction Stop).Source
-    & (Join-Path $env:SystemRoot 'System32\cscript.exe') //nologo $launcher $pwshPath $installedWorker $installedPlugin $db week dry-run
+    & (Join-Path $env:SystemRoot 'System32\cscript.exe') //nologo $launcher $pwshPath $installedWorker $installedPlugin $db week 'english-skills:test-week' 1 dry-run
     if ($LASTEXITCODE -ne 0) { throw 'Hidden launcher did not complete a dry-run worker successfully.' }
     Write-Output (@{ ok = $true; taskNames = $installed.taskNames } | ConvertTo-Json -Compress)
 } finally {

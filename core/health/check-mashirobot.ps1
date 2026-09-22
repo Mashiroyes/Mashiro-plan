@@ -201,7 +201,7 @@ try {
     $LanguageManifestDetail = $LanguageManifestPath
     try {
         $LanguageManifest = Get-Content -LiteralPath $LanguageManifestPath -Raw -Encoding utf8 | ConvertFrom-Json
-        $LanguageManifestOk = ($LanguageManifest.id -eq 'mashirobot-plugin-language' -and $LanguageManifest.menuIndex -eq 6 -and $LanguageManifest.enabled)
+        $LanguageManifestOk = ($LanguageManifest.id -eq 'mashirobot-plugin-language' -and $LanguageManifest.menuIndex -eq 5 -and $LanguageManifest.enabled)
     } catch { $LanguageManifestDetail = $_.Exception.Message }
     Add-HealthCheck 'language-plugin-manifest' $LanguageManifestOk $LanguageManifestDetail
 
@@ -388,7 +388,8 @@ console.log(JSON.stringify({ loaded: registry.plugins.map((entry) => entry.manif
                     [ordered]@{ name = '计划'; description = '计划、记录、作息与提醒'; menuIndex = 1 },
                     [ordered]@{ name = '游戏计时与禁止名单'; description = '游戏限时提醒、超时强退和禁止规则'; menuIndex = 2 },
                     [ordered]@{ name = '状态'; description = 'Windows 系统状态与硬件信息图片'; menuIndex = 3 },
-                    [ordered]@{ name = '战利品'; description = '记录当天最后一次爽点并在次日回放'; menuIndex = 4 }
+                    [ordered]@{ name = '战利品'; description = '记录当天最后一次爽点并在次日回放'; menuIndex = 4 },
+                    [ordered]@{ name = '语言学习'; description = '英语听说读写统计与关键词管理'; menuIndex = 5 }
                 )
                 unavailablePluginCount = 0
             } | ConvertTo-Json -Depth 6 -Compress

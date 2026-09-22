@@ -47,6 +47,35 @@ function registryFor(plugins) {
   };
 }
 
+test("routes shared system commands before plugins", async () => {
+  let pluginMatched = false;
+  const localPlugin = plugin({ id: "local", menuIndex: 1, match: () => { pluginMatched = true; return true; } });
+  const route = createPluginRouter({
+    registry: registryFor([localPlugin]),
+    planRoot: path.resolve(import.meta.dirname, ".."),
+    systemRouter: async (text) => text === "数据库自检" ? { handled: true, command: "数据库自检", reply: "正常", mediaPaths: [] } : null,
+  });
+  const result = await route("数据库自检", { accountId: "a", conversationId: "c" });
+  assert.equal(result.command, "数据库自检");
+  assert.equal(pluginMatched, false);
+});
+
+test("routes scoped help aliases without opening the numbered menu", async () => {
+  const plugins = [
+    plugin({ id: "mashirobot-plugin-plan", menuIndex: 1 }),
+    plugin({ id: "mashirobot-plugin-game-timer", menuIndex: 2 }),
+    plugin({ id: "mashirobot-plugin-language", menuIndex: 5 }),
+  ];
+  const route = createPluginRouter({
+    registry: registryFor(plugins), planRoot: path.resolve(import.meta.dirname, ".."),
+    helpService: { renderPluginHelp: (selected) => ({ handled: true, command: "插件帮助", reply: selected.manifest.id, mediaPaths: [] }), renderMainMenu: () => ({ handled: true, command: "帮助菜单", reply: "menu", mediaPaths: [] }) },
+  });
+  assert.equal((await route("提醒帮助")).reply, "mashirobot-plugin-plan");
+  assert.equal((await route("游戏帮助")).reply, "mashirobot-plugin-game-timer");
+  assert.equal((await route("禁止帮助")).reply, "mashirobot-plugin-game-timer");
+  assert.equal((await route("英语帮助")).reply, "mashirobot-plugin-language");
+});
+
 function createFixture(overrides = {}) {
   let clock = 1_000_000;
   const planPlugin = plugin({

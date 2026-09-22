@@ -1,7 +1,7 @@
 import { handlePlan, matchesPlan, parsePlanDate } from "./plan.mjs";
 import { handleRecord, matchesRecord, splitPlanAndDailyRecord } from "./record.mjs";
 import { handleReminder, matchesReminder } from "./reminder.mjs";
-import { handleRoutine, ROUTINE_KEYWORDS } from "./routine.mjs";
+import { handleRoutine, matchesRoutine } from "./routine.mjs";
 import { handleSleepQuery, parseSleepQuery } from "./sleep.mjs";
 import { handleWakeup, matchesWakeup } from "./wakeup.mjs";
 
@@ -27,7 +27,7 @@ export function matchPlanPlugin(message, context = {}) {
   if (splitPlanAndDailyRecord(text)) return true;
   if (matchesRecord(text, context)) return true;
   if (matchesPlan(text, context)) return true;
-  if (ROUTINE_KEYWORDS.has(text)) return true;
+  if (matchesRoutine(text)) return true;
   if (matchesWakeup(text, context)) return true;
   return parseSleepQuery(text, context.now) !== null;
 }

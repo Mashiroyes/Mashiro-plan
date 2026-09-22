@@ -48,7 +48,7 @@ public static class GracefulFixture {
     $mismatch = Start-Fixture $PathB
     Start-Sleep -Milliseconds 500
     & node $Fixture create $MismatchDatabase mismatch $PathA | Out-Null
-    & pwsh -NoProfile -File $Worker -Mode Force -TaskId mismatch -SqlitePath $MismatchDatabase -ScheduledTaskName test-mismatch -DryRun
+    & pwsh -NoProfile -File $Worker -Mode Force -TaskId mismatch -TaskVersion 1 -JobId worker:mismatch -SqlitePath $MismatchDatabase -ScheduledTaskName test-mismatch -DryRun
     $mismatch.Refresh()
     Assert-True (-not $mismatch.HasExited) 'Path-mismatched process was closed.'
     $state = (& node $Fixture get $MismatchDatabase mismatch | ConvertFrom-Json)
@@ -60,7 +60,7 @@ public static class GracefulFixture {
     $reportedExactPath = [string](Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $exact.Id)).ExecutablePath
     & node $Fixture create $ExactDatabase exact $reportedExactPath | Out-Null
     $forceStarted = [DateTimeOffset]::UtcNow
-    & pwsh -NoProfile -File $Worker -Mode Force -TaskId exact -SqlitePath $ExactDatabase -ScheduledTaskName test-exact -DryRun -FixtureQueueVault
+    & pwsh -NoProfile -File $Worker -Mode Force -TaskId exact -TaskVersion 1 -JobId worker:exact -SqlitePath $ExactDatabase -ScheduledTaskName test-exact -DryRun -FixtureQueueVault
     $forceElapsed = ([DateTimeOffset]::UtcNow - $forceStarted).TotalSeconds
     $exact.WaitForExit(5000) | Out-Null
     $exact.Refresh()
@@ -85,7 +85,7 @@ public static class GracefulFixture {
     }
     $reportedGracefulPath = [string](Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $graceful.Id)).ExecutablePath
     & node $Fixture create $GracefulDatabase graceful $reportedGracefulPath | Out-Null
-    & pwsh -NoProfile -File $Worker -Mode Force -TaskId graceful -SqlitePath $GracefulDatabase -ScheduledTaskName test-graceful -DryRun
+    & pwsh -NoProfile -File $Worker -Mode Force -TaskId graceful -TaskVersion 1 -JobId worker:graceful -SqlitePath $GracefulDatabase -ScheduledTaskName test-graceful -DryRun
     $graceful.WaitForExit(5000) | Out-Null
     Assert-True (Test-Path -LiteralPath $GracefulMarker) 'Normal window-close request was not delivered.'
 

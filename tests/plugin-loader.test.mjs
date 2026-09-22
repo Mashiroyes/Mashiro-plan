@@ -86,6 +86,18 @@ test("does not import or expose a disabled plugin", async (t) => {
   assert.deepEqual(registry.failures, []);
 });
 
+test("allows a disabled plugin to omit its menu number", async (t) => {
+  const fixtureRoot = await createFixture(t);
+  await writePlugin(fixtureRoot, {
+    manifest: { enabled: false, menuIndex: undefined },
+  });
+
+  const registry = await loadPlugins({ pluginRoot: fixtureRoot, logger: () => {} });
+
+  assert.deepEqual(registry.plugins, []);
+  assert.deepEqual(registry.failures, []);
+});
+
 test("rejects a directory and manifest ID mismatch", async (t) => {
   const fixtureRoot = await createFixture(t);
   await writePlugin(fixtureRoot, {
@@ -192,6 +204,7 @@ test("rejects malformed required manifest fields and missing plugin files", asyn
     ["version", { version: null }, "INVALID_MANIFEST"],
     ["description", { description: 10 }, "INVALID_MANIFEST"],
     ["menu", { menuIndex: 0 }, "INVALID_MANIFEST"],
+    ["enabled plugin without menu", { menuIndex: undefined }, "INVALID_MANIFEST"],
     ["priority", { priority: Number.NaN }, "INVALID_MANIFEST"],
     ["enabled", { enabled: "yes" }, "INVALID_MANIFEST"],
     ["entry", { entry: "" }, "INVALID_MANIFEST"],

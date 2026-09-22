@@ -23,6 +23,10 @@
 
 插件返回统一的文字和图片结果。已匹配的插件即使执行失败，也只返回本地错误，不会把同一条消息交给 GPT 重试。
 
+系统公共控制层位于 `core\control`：`CommandRouter` 处理跨插件严格命令，`ReminderManager` 统一提醒优先级、静默、合并和确认，`JobManager` 以 SQLite 中的 `job_id + version` 作为计划任务主状态，`OperationJournal` 记录文件移动与系统规则等副作用，`UndoManager` 只撤销有明确定义逆操作的最近一次变更。SQLite 启用 WAL、外键、版本化迁移和轮换备份。
+
+公共指令包括：`撤销上一操作`、`当前任务`、`自检`、`数据库自检`、`查看当前提醒`、`暂停提醒30分钟`、`今晚静默`、`恢复提醒`。`提醒帮助`、`游戏帮助`、`禁止帮助`、`英语帮助` 可直接打开对应插件帮助。删除、强退、文件移动和已产生外部副作用的操作不会被假称为已撤销，而会提示对应恢复流程。
+
 ## 目录
 
 ```text
@@ -46,7 +50,7 @@ plan/
 
 网关启动时扫描 `plan\plugin` 的直接子目录，只加载名称匹配 `mashirobot-plugin-*` 的文件夹。每个插件至少需要：
 
-- `plugin.json`：ID、名称、版本、固定菜单编号、优先级和精确指令。
+- `plugin.json`：ID、名称、版本、固定菜单编号、优先级和精确指令。禁用插件可省略菜单编号，不参与编号分配。
 - `index.mjs`：`match`、`handle`、`healthCheck` 和 `getHelp` 四个同步导出。
 - `README.md`：该插件完整的用户与维护说明。
 
@@ -82,7 +86,9 @@ plan/
 | 2 | `plugin\mashirobot-plugin-game-timer` | 游戏限时提醒、超时强退，以及按期限禁止软件和网站 | [游戏计时与禁止名单插件 README](plugin/mashirobot-plugin-game-timer/README.md) |
 | 3 | `plugin\mashirobot-plugin-status` | Windows 系统状态与硬件信息图片 | [状态插件 README](plugin/mashirobot-plugin-status/README.md) |
 | 4 | `plugin\mashirobot-plugin-loot` | 记录当天最后一次爽点并在次日回放 | [战利品插件 README](plugin/mashirobot-plugin-loot/README.md) |
-| 5 | `plugin\mashirobot-plugin-financial-report` | 零基础财报、招股书课程与聊天模式点评 | [财报与招股书插件 README](plugin/mashirobot-plugin-financial-report/README.md) |
+| 5 | `plugin\mashirobot-plugin-language` | 英语听说读写统计与关键词管理 | [语言学习插件 README](plugin/mashirobot-plugin-language/README.md) |
+
+`mashirobot-plugin-financial-report` 当前处于禁用状态且不占用任何菜单编号；后续新增、启用并显示在菜单中的插件从 **6** 开始编号。
 
 ## 维护规则
 

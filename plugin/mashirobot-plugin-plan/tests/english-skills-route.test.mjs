@@ -13,7 +13,7 @@ test("all requested English chart phrases return a Python PNG", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "english-skills-route-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const keywords = path.join(root, "english-skill-keywords.json");
-  await copyFile(path.resolve("plan/plugin/mashirobot-plugin-language/config/english-skill-keywords.json"), keywords);
+  await copyFile(path.resolve(import.meta.dirname, "../../mashirobot-plugin-language/config/english-skill-keywords.json"), keywords);
   const context = {
     sqlitePath: path.join(root, "planner.sqlite"), tempRoot: path.join(root, "temp"),
     englishKeywordsPath: keywords, now: new Date("2026-08-09T12:00:00+08:00"),

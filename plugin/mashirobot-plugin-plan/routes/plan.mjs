@@ -143,6 +143,11 @@ export async function handlePlan(rawText, context = {}) {
           "utf8",
         ).toString("base64"),
       });
+      if (result?.verifiedDatabase === true) context.undoManager?.record({
+        scope: `${context.accountId ?? "global"}:${context.conversationId ?? "global"}`,
+        owner: "mashirobot-plugin-plan", actionKind: "plan-version",
+        description: `${planDate} 的计划版本`, inversePayload: { planDate, revisionNo: result.revisionNo },
+      });
       return { command: "保存计划", reply: formatPlanSaveReply(result) };
     } catch (error) {
       if (error?.code === "PROCESS_TIMEOUT") {

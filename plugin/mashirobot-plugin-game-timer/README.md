@@ -29,7 +29,8 @@ D:\Games\Eden-v0.0.4-win\eden.exe
 - 未指定宽限时间时默认 10 分钟。
 - 同一可执行文件在“游戏时长 + 宽限时间 + 10 分钟”内不能覆盖或重新设置。
 - 游戏提前退出不会提前解除锁。
-- 微信端没有取消指令。
+- 开始后返回 `Gnnn` 短编号。支持 `查询游戏计时`、`取消游戏计时`/`取消 Gnnn`、`延长30分钟`/`延长 Gnnn 30分钟`、`立即结束游戏计时`/`立即结束 Gnnn`。
+- `恢复所有游戏文件` 启动独立的最高权限恢复任务，不经过禁止规则判断。
 
 正常关闭和强制关闭都只处理同时满足“进程名相同”和“完整程序路径相同”的 PID，不关闭 Steam。同名但路径不同的程序不会被关闭。微信会区分“已正常关闭”和“已强制退出”。
 
@@ -50,7 +51,7 @@ D:\Games\Eden-v0.0.4-win\eden.exe
 
 ## 数据与 Windows 任务
 
-计时和锁保存在 `plan\sqlite\openclaw-planner.sqlite` 的 `game_timer_tasks` 表。提醒和强退分别使用一次性 Windows 任务：
+计时和锁保存在 `plan\sqlite\openclaw-planner.sqlite` 的 `game_timer_tasks` 表。SQLite 是主状态，每个提醒和强退任务携带唯一 `job_id + version`，旧版本 worker 会直接退出。提醒和强退分别使用一次性 Windows 任务：
 
 - `OpenClaw-GameTimer-Reminder-*`
 - `OpenClaw-GameTimer-Force-*`

@@ -33,6 +33,16 @@ try {
       (task_id,game_key,display_name,original_path,state,requested_at,updated_at)
       VALUES (?,?,?,?,'pending',?,?)`).run(task.id,task.game_key,task.display_name,task.executable_path,now,now);
     process.stdout.write(JSON.stringify({ ok: true }));
+  } else if (mode === "claim-job") {
+    const payload = JSON.parse(Buffer.from(payload64, "base64").toString("utf8"));
+    const now = new Date().toISOString();
+    const changed = db.prepare("UPDATE managed_jobs SET status='running',claimed_at=?,updated_at=? WHERE job_id=? AND version=? AND status='desired'").run(now,now,id,Number(payload.version));
+    process.stdout.write(JSON.stringify({claimed:changed.changes===1}));
+  } else if (mode === "complete-job") {
+    const payload = JSON.parse(Buffer.from(payload64, "base64").toString("utf8"));
+    const now = new Date().toISOString();
+    const changed = db.prepare("UPDATE managed_jobs SET status=?,completed_at=?,updated_at=? WHERE job_id=? AND version=? AND status='running'").run(payload.ok?'completed':'failed',now,now,id,Number(payload.version));
+    process.stdout.write(JSON.stringify({updated:changed.changes===1}));
   } else {
     throw new Error(`unknown mode: ${mode}`);
   }

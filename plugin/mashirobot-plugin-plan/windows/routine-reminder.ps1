@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet(
-        'Shower','StartNight','CheckNight',
+        'Shower','StartNight','CheckNight','SetDeferredNightReminder','RunDeferredNightReminder',
         'SetWakeup','GetWakeup','CancelWakeup','RunWakeup',
         'CleanupLegacyWakeup','SetGeneralReminder','RunGeneralReminder'
     )]
@@ -11,6 +11,8 @@ param(
     [string]$ReminderId,
     [string]$TaskName,
     [string]$OperationId,
+    [string]$JobId,
+    [int]$JobVersion = 1,
     [switch]$DryRun
 )
 
@@ -24,6 +26,60 @@ function Remove-GeneralReminderScheduledTask {
 
     if (-not $Name -or -not $Name.StartsWith('OpenClaw-General-')) { return }
     Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
+}
+
+function Remove-DeferredNightScheduledTask {
+    param([string]$Name)
+
+    if (-not $Name -or -not $Name.StartsWith('MashiroBot-NightDeferred-')) { return }
+    Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
+}
+
+function Get-RoutineReminderResumeAt {
+    param([object]$State)
+
+    if ($null -eq $State) { return $null }
+    if ($State -is [System.Collections.IDictionary]) { return $State['remindAfter'] }
+    $property = $State.PSObject.Properties['remindAfter']
+    if ($null -ne $property) { return $property.Value }
+    return $null
+}
+
+function Invoke-SetDeferredNightReminder {
+    if (-not $StartAt) { throw 'SetDeferredNightReminder 需要 -StartAt。' }
+    if (-not $TaskName -or -not $TaskName.StartsWith('MashiroBot-NightDeferred-')) { throw 'SetDeferredNightReminder 的 TaskName 无效。' }
+    . (Join-Path $PSScriptRoot 'routine-common.ps1')
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    $styles = [Globalization.DateTimeStyles]::RoundtripKind
+    $start = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse($StartAt, $culture, $styles, [ref]$start)) { throw 'SetDeferredNightReminder 的 StartAt 必须是带时区的 ISO 日期时间。' }
+    if ($start -le (Get-ShanghaiNow)) { throw '延迟睡觉提醒的时间已经过去。' }
+    $pwshPath = (Get-Command pwsh.exe -ErrorAction Stop).Source
+    $newJobId = 'night-deferred:' + $TaskName
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action RunDeferredNightReminder -TaskName "{1}" -OperationId "{2}" -JobId "{3}" -JobVersion 1' -f $PSCommandPath, $TaskName, $OperationId, $newJobId
+    $taskAction = New-ScheduledTaskAction -Execute $pwshPath -Argument $arguments
+    $trigger = New-ScheduledTaskTrigger -Once -At $start.LocalDateTime
+    $settings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
+    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+    if (-not $DryRun) { Invoke-ControlJob -Action 'upsert' -Payload @{jobId=$newJobId;version=1;owner='mashirobot-plugin-plan';kind='sleep-deferred';taskName=$TaskName;runAt=$start.ToString('o');payload=@{execution=@{executable=$pwshPath;arguments=$arguments}}}|Out-Null; Register-ScheduledTask -TaskName $TaskName -InputObject (New-ScheduledTask -Action $taskAction -Trigger $trigger -Settings $settings -Principal $principal) -Force | Out-Null }
+    [pscustomobject]@{ taskName = $TaskName; startAt = $start.ToString('o'); verifiedTasks = [bool]$DryRun -or [bool](Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) } | ConvertTo-Json -Compress
+}
+
+function Invoke-RunDeferredNightReminder {
+    if (-not $TaskName) { throw 'RunDeferredNightReminder 需要 -TaskName。' }
+    . (Join-Path $PSScriptRoot 'routine-common.ps1')
+    try {
+        if($JobId){$jobClaim=Invoke-ControlJob -Action 'claim' -Payload @{jobId=$JobId;version=$JobVersion};if(-not[bool]$jobClaim.claimed){return}}
+        $now = Get-ShanghaiNow
+        $state = Read-RoutineState
+        $resumeAt = [DateTimeOffset]::MinValue
+        $remindAfter = Get-RoutineReminderResumeAt -State $state
+        if ($null -eq $state -or [bool]$state.slept -or -not [DateTimeOffset]::TryParse([string]$remindAfter, [ref]$resumeAt) -or $now -lt $resumeAt) { if($JobId){Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$true}|Out-Null}; return }
+        Send-ManagedReminder -Message '真白，该睡觉啦。回复“已睡觉”“延迟30分钟”或“今晚不再提醒”。' -Kind 'sleep' -Priority 2 -DedupeKey ('sleep:' + [string]$state.routineDate) -SourceRef ([string]$state.routineDate) -Repeat -DryRun:$DryRun | Out-Null
+        if($JobId){Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$true}|Out-Null}
+    } finally {
+        if (-not $DryRun) { Remove-DeferredNightScheduledTask -Name $TaskName }
+    }
 }
 
 function Invoke-SetGeneralReminder {
@@ -50,7 +106,8 @@ function Invoke-SetGeneralReminder {
     $newTaskName = [string]$reminder.taskName
 
     $pwshPath = (Get-Command pwsh.exe -ErrorAction Stop).Source
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action RunGeneralReminder -ReminderId "{1}" -TaskName "{2}" -OperationId "{3}"' -f $PSCommandPath, $newReminderId, $newTaskName, $OperationId
+    $newJobId='general:'+$newReminderId
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action RunGeneralReminder -ReminderId "{1}" -TaskName "{2}" -OperationId "{3}" -JobId "{4}" -JobVersion 1' -f $PSCommandPath, $newReminderId, $newTaskName, $OperationId, $newJobId
     $taskAction = New-ScheduledTaskAction -Execute $pwshPath -Argument $arguments
     $trigger = New-ScheduledTaskTrigger -Once -At $start.LocalDateTime -RepetitionInterval (New-TimeSpan -Minutes 5)
     $settings = New-ScheduledTaskSettingsSet `
@@ -70,6 +127,7 @@ function Invoke-SetGeneralReminder {
     $taskError = ''
     if (-not $DryRun) {
         try {
+            Invoke-ControlJob -Action 'upsert' -Payload @{jobId=$newJobId;version=1;owner='mashirobot-plugin-plan';kind='general-reminder';taskName=$newTaskName;runAt=$start.ToString('o');recurrence=@{intervalMinutes=5};payload=@{reminderId=$newReminderId;execution=@{executable=$pwshPath;arguments=$arguments}}}|Out-Null
             Register-ScheduledTask -TaskName $newTaskName -InputObject $definition -Force | Out-Null
             Enable-ScheduledTask -TaskName $newTaskName | Out-Null
         } catch {
@@ -113,12 +171,17 @@ function Invoke-RunGeneralReminder {
     if (-not $TaskName) { throw 'RunGeneralReminder 需要 -TaskName。' }
     . (Join-Path $PSScriptRoot 'reminder-common.ps1')
 
+    if($JobId){$jobClaim=Invoke-ControlJob -Action 'claim' -Payload @{jobId=$JobId;version=$JobVersion};if(-not[bool]$jobClaim.claimed){return}}
+
     $claim = Invoke-PlannerDb -Arguments @('prepare-general-reminder', '--reminder-id', $ReminderId)
     if (-not [bool]$claim.shouldSend) {
         $reason = [string]$claim.reason
         Write-ReminderLog "General reminder skipped id=$ReminderId reason=$reason"
         if (($reason -eq 'acknowledged' -or $reason -eq 'missing') -and -not $DryRun) {
+            if($JobId){Invoke-ControlJob -Action 'cancel' -Payload @{jobId=$JobId}|Out-Null}
             Remove-GeneralReminderScheduledTask -Name $TaskName
+        } elseif($JobId) {
+            Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$true;recurring=$true}|Out-Null
         }
         return
     }
@@ -126,11 +189,12 @@ function Invoke-RunGeneralReminder {
     $content = [string]$claim.reminder.content
     $reminderText = '提醒：{0}。完成后回复“收到”。' -f $content
     try {
-        Send-OpenClawWeixinMessage -Message $reminderText -DryRun:$DryRun | Out-Null
+        Send-ManagedReminder -Message $reminderText -Kind 'user' -Priority 4 -DedupeKey "general:$ReminderId" -SourceRef $ReminderId -RequiresAck -Repeat -DryRun:$DryRun | Out-Null
         Invoke-PlannerDb -Arguments @(
             'finish-general-reminder', '--reminder-id', $ReminderId, '--status', 'sent'
         ) | Out-Null
         Write-ReminderLog "General reminder sent id=$ReminderId dryRun=$DryRun"
+        if($JobId){Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$true;recurring=$true}|Out-Null}
     } catch {
         $errorText = $_.Exception.Message
         try {
@@ -142,6 +206,7 @@ function Invoke-RunGeneralReminder {
             Write-ReminderLog "Could not persist general reminder failure id=${ReminderId}: $($_.Exception.Message)"
         }
         Write-ReminderLog "ERROR general reminder id=${ReminderId}: $errorText"
+        if($JobId){try{Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$false;error=$errorText}|Out-Null}catch{}}
         throw
     }
 }
@@ -151,7 +216,8 @@ function Invoke-StartNight {
     $now = Get-ShanghaiNow
     $state = New-RoutineState -Now $now
     Write-RoutineState -State $state
-    Write-Output '真白，先确认单词有没有打卡。打完后回复“已打卡”，睡下后回复“已睡觉”。'
+    Send-ManagedReminder -Message '真白，该睡觉啦。回复“已睡觉”“延迟30分钟”或“今晚不再提醒”。' -Kind 'sleep' -Priority 2 -DedupeKey ('sleep:' + [string]$state.routineDate) -SourceRef ([string]$state.routineDate) -Repeat -DryRun:$DryRun | Out-Null
+    Write-Output 'NO_REPLY'
 }
 
 function Invoke-CheckNight {
@@ -169,12 +235,19 @@ function Invoke-CheckNight {
         $state = New-RoutineState -Now $now
         Write-RoutineState -State $state
     }
-    if ([bool]$state.slept) {
+    if ([bool]$state.slept -or [bool]$state.dismissed) {
         Write-Output 'NO_REPLY'
-    } elseif ([bool]$state.wordChecked) {
-        Write-Output '真白，单词已经打卡了，该睡觉啦。睡下后回复“已睡觉”。'
+    } elseif (-not [string]::IsNullOrWhiteSpace([string](Get-RoutineReminderResumeAt -State $state))) {
+        $resumeAt = [DateTimeOffset]::MinValue
+        if ([DateTimeOffset]::TryParse([string](Get-RoutineReminderResumeAt -State $state), [ref]$resumeAt) -and $now -lt $resumeAt) {
+            Write-Output 'NO_REPLY'
+        } else {
+            Send-ManagedReminder -Message '真白，该睡觉啦。回复“已睡觉”“延迟30分钟”或“今晚不再提醒”。' -Kind 'sleep' -Priority 2 -DedupeKey ('sleep:' + [string]$state.routineDate) -SourceRef ([string]$state.routineDate) -Repeat -DryRun:$DryRun | Out-Null
+            Write-Output 'NO_REPLY'
+        }
     } else {
-        Write-Output '真白，先把单词打卡完成，打完回复“已打卡”。然后再睡觉。'
+        Send-ManagedReminder -Message '真白，该睡觉啦。回复“已睡觉”“延迟30分钟”或“今晚不再提醒”。' -Kind 'sleep' -Priority 2 -DedupeKey ('sleep:' + [string]$state.routineDate) -SourceRef ([string]$state.routineDate) -Repeat -DryRun:$DryRun | Out-Null
+        Write-Output 'NO_REPLY'
     }
 }
 
@@ -195,7 +268,8 @@ function Invoke-SetWakeup {
 
     $newTaskName = $script:WakeupTaskPrefix + $start.ToString('yyyyMMdd-HHmmss')
     $pwshPath = (Get-Command pwsh.exe -ErrorAction Stop).Source
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action RunWakeup -TaskName "{1}" -OperationId "{2}"' -f $PSCommandPath, $newTaskName, $OperationId
+    $newJobId='wakeup:'+$newTaskName
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action RunWakeup -TaskName "{1}" -OperationId "{2}" -JobId "{3}" -JobVersion 1' -f $PSCommandPath, $newTaskName, $OperationId, $newJobId
     $taskAction = New-ScheduledTaskAction -Execute $pwshPath -Argument $arguments
     $trigger = New-ScheduledTaskTrigger -Once -At $start.LocalDateTime -RepetitionInterval (New-TimeSpan -Minutes 10)
     $settings = New-ScheduledTaskSettingsSet `
@@ -232,6 +306,7 @@ function Invoke-SetWakeup {
 
     $oldState = Read-WakeupState
     $oldTaskName = if ($oldState -and $oldState.ContainsKey('windowsTaskName')) { [string]$oldState.windowsTaskName } else { '' }
+    Invoke-ControlJob -Action 'upsert' -Payload @{jobId=$newJobId;version=1;owner='mashirobot-plugin-plan';kind='wakeup';taskName=$newTaskName;runAt=$start.ToString('o');recurrence=@{intervalMinutes=10};payload=@{execution=@{executable=$pwshPath;arguments=$arguments}}}|Out-Null
     Register-ScheduledTask -TaskName $newTaskName -InputObject $definition -Force | Out-Null
     try {
         $state = @{
@@ -247,7 +322,7 @@ function Invoke-SetWakeup {
         if ($oldState) { Write-WakeupState -State $oldState }
         throw
     }
-    if ($oldTaskName -and $oldTaskName -ne $newTaskName) { Remove-WakeupScheduledTask -TaskName $oldTaskName }
+    if ($oldTaskName -and $oldTaskName -ne $newTaskName) { Invoke-ControlJob -Action 'cancel-task' -Payload @{taskName=$oldTaskName}|Out-Null; Remove-WakeupScheduledTask -TaskName $oldTaskName }
     Remove-AllWakeupScheduledTasks -ExceptTaskName $newTaskName | Out-Null
     $verifiedState = Read-WakeupState
     $verifiedDatabase = $verifiedState -and [bool]$verifiedState.active -and [string]$verifiedState.windowsTaskName -eq $newTaskName -and [string]$verifiedState.operationId -eq $OperationId
@@ -284,6 +359,7 @@ function Invoke-GetWakeup {
 function Invoke-CancelWakeup {
     . (Join-Path $PSScriptRoot 'wakeup-common.ps1')
     $state = Read-WakeupState
+    if($state -and $state.windowsTaskName){try{Invoke-ControlJob -Action 'cancel-task' -Payload @{taskName=[string]$state.windowsTaskName}|Out-Null}catch{}}
     $removedWindowsTasks = @(Remove-AllWakeupScheduledTasks)
     $now = Get-ShanghaiNow
     $newState = @{
@@ -348,6 +424,8 @@ function Invoke-RunWakeup {
     . (Join-Path $PSScriptRoot 'wakeup-common.ps1')
     . (Join-Path $PSScriptRoot 'cloudmusic-playback.ps1')
 
+    if($JobId){$jobClaim=Invoke-ControlJob -Action 'claim' -Payload @{jobId=$JobId;version=$JobVersion};if(-not[bool]$jobClaim.claimed){return}}
+
     $delivery = Get-MashiroDeliveryConfig
     $machineModule = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
     Import-Module $machineModule -Force
@@ -356,6 +434,7 @@ function Invoke-RunWakeup {
     $state = Read-WakeupState
     if ($null -eq $state -or -not [bool]$state.active -or [string]$state.windowsTaskName -ne $TaskName) {
         Write-WakeupLog "Task $TaskName is stale or inactive; removing it."
+        if($JobId){Invoke-ControlJob -Action 'cancel' -Payload @{jobId=$JobId}|Out-Null}
         if (-not $DryRun) { Remove-WakeupScheduledTask -TaskName $TaskName }
         return
     }
@@ -386,9 +465,9 @@ function Invoke-RunWakeup {
     try {
         if ($DryRun) { Write-WakeupLog 'DRY RUN: would send Weixin wakeup reminder.' }
         else {
-            $sendOutput = & $delivery.OpenClawCommand message send --json --channel 'openclaw-weixin' --account $delivery.Account --target $delivery.Target --message $reminderText 2>&1
-            if ($LASTEXITCODE -ne 0) { throw ($sendOutput -join [Environment]::NewLine) }
+            Send-ManagedReminder -Message $reminderText -Kind 'wakeup' -Priority 6 -DedupeKey ("wakeup:" + $TaskName) -SourceRef $TaskName -Repeat | Out-Null
             Write-WakeupLog 'Weixin wakeup reminder sent.'
+            if($JobId){Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$true;recurring=$true}|Out-Null}
         }
         $latest = Read-WakeupState
         if ($latest -and [bool]$latest.active -and [string]$latest.windowsTaskName -eq $TaskName) {
@@ -396,6 +475,7 @@ function Invoke-RunWakeup {
         }
     } catch {
         Write-WakeupLog ('ERROR sending Weixin reminder: {0}' -f $_.Exception.Message)
+        if($JobId){try{Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$false;error=$_.Exception.Message}|Out-Null}catch{}}
         $latest = Read-WakeupState
         if ($latest -and [bool]$latest.active -and [string]$latest.windowsTaskName -eq $TaskName) {
             $latest.lastError = $_.Exception.Message; $latest.updatedAt = $now.ToString('o'); Write-WakeupState -State $latest
@@ -404,9 +484,11 @@ function Invoke-RunWakeup {
 }
 
 switch ($Action) {
-    'Shower' { Write-Output '真白，该洗澡啦。洗完就准备打卡和睡觉。' }
+    'Shower' { . (Join-Path $PSScriptRoot 'routine-common.ps1'); Send-ManagedReminder -Message '真白，该洗澡啦。洗完就准备睡觉。' -Kind 'habit' -Priority 2 -DedupeKey ('shower:' + (Get-NightRoutineDate -Now (Get-ShanghaiNow))) -SourceRef (Get-NightRoutineDate -Now (Get-ShanghaiNow)) -DryRun:$DryRun | Out-Null; Write-Output 'NO_REPLY' }
     'StartNight' { Invoke-StartNight }
     'CheckNight' { Invoke-CheckNight }
+    'SetDeferredNightReminder' { Invoke-SetDeferredNightReminder }
+    'RunDeferredNightReminder' { Invoke-RunDeferredNightReminder }
     'SetWakeup' { Invoke-SetWakeup }
     'GetWakeup' { Invoke-GetWakeup }
     'CancelWakeup' { Invoke-CancelWakeup }

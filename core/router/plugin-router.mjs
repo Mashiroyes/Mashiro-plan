@@ -113,6 +113,7 @@ export function createPluginRouter({
   planRoot,
   logger,
   runLocalProcess,
+  systemRouter,
 } = {}) {
   if (!registry?.plugins || !registry?.byMenuIndex || !registry?.byExactCommand) {
     throw new TypeError("a loaded plugin registry is required");
@@ -165,6 +166,17 @@ export function createPluginRouter({
       );
       const key = `${context.accountId}\0${context.conversationId}`;
 
+      const helpAliasIds = new Map([
+        ["提醒帮助", "mashirobot-plugin-plan"],
+        ["游戏帮助", "mashirobot-plugin-game-timer"],
+        ["禁止帮助", "mashirobot-plugin-game-timer"],
+        ["英语帮助", "mashirobot-plugin-language"],
+      ]);
+      if (helpAliasIds.has(text)) {
+        const plugin = registry.plugins.find((entry) => entry.manifest.id === helpAliasIds.get(text));
+        if (plugin) return remember(await renderPluginHelp(plugin, { detailed: false, context }));
+      }
+
       if (HELP_ALIASES.has(text)) {
         menuSessions.open(key);
         const helpStartedAt = performance.now();
@@ -211,6 +223,14 @@ export function createPluginRouter({
           } finally {
             metrics.handleElapsedMs += Math.max(0, performance.now() - helpStartedAt);
           }
+        }
+      }
+
+      if (systemRouter) {
+        const systemResult = await systemRouter(text, context);
+        if (systemResult) {
+          metrics.pluginId = "mashirobot-core";
+          return remember(normalizePluginResult(systemResult, "mashirobot-core"));
         }
       }
 

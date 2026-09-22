@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][ValidateSet('Reminder', 'Force')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$TaskId,
+    [Parameter(Mandatory = $true)][int]$TaskVersion,
+    [Parameter(Mandatory = $true)][string]$JobId,
     [Parameter(Mandatory = $true)][string]$SqlitePath,
     [Parameter(Mandatory = $true)][string]$ScheduledTaskName,
     [switch]$DryRun,
@@ -12,6 +14,7 @@ $OutputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $OutputEncoding
 $MachineModule = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
 $DbHelper = Join-Path $PSScriptRoot 'game-timer-db-v1.mjs'
+$ReminderCli = Join-Path $PSScriptRoot 'control\reminder-cli.mjs'
 
 function Write-WorkerLog([string]$Message) {
     $logDir = Join-Path $env:USERPROFILE '.openclaw\logs'
@@ -36,8 +39,25 @@ function Update-TimerState([hashtable]$Payload) {
     if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
 }
 
-function Send-Weixin([string]$Message) {
+function Invoke-JobState([string]$Action, [hashtable]$Payload) {
+    $json = $Payload | ConvertTo-Json -Compress
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+    $output = & node $DbHelper $Action $SqlitePath $JobId $encoded 2>&1
+    if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
+    return (($output -join '') | ConvertFrom-Json)
+}
+
+function Invoke-ManagedReminder([string]$Action,[hashtable]$Payload) {
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($Payload|ConvertTo-Json -Compress -Depth 8)))
+    $raw=& node $ReminderCli $Action $SqlitePath $encoded 2>&1
+    if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)}
+    return (($raw-join'')|ConvertFrom-Json)
+}
+
+function Send-Weixin([string]$Message,[string]$Kind,[int]$Priority,[string]$DedupeKey) {
     if ($DryRun) { return }
+    $managed=Invoke-ManagedReminder 'dispatch' @{sourcePlugin='mashirobot-plugin-game-timer';kind=$Kind;priority=$Priority;content=$Message;requiresAck=$false;dedupeKey=$DedupeKey;sourceRef=$TaskId;dueAt=[DateTimeOffset]::UtcNow.ToString('o')}
+    if(-not[bool]$managed.shouldSend){return}
     if (-not (Test-Path -LiteralPath $MachineModule -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $MachineModule" }
     Import-Module $MachineModule -Force
     $delivery = Resolve-MashiroWeixinDelivery
@@ -46,8 +66,9 @@ function Send-Weixin([string]$Message) {
         try {
             $output = & $delivery.OpenClawCommand message send --json `
                 --channel 'openclaw-weixin' --account $delivery.Account `
-                --target $delivery.Target --message $Message 2>&1
+                --target $delivery.Target --message ([string]$managed.message) 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
+            [void](Invoke-ManagedReminder 'finish' @{reminderIds=@($managed.reminderIds);ok=$true})
             return
         } catch {
             $lastError = $_.Exception
@@ -55,6 +76,7 @@ function Send-Weixin([string]$Message) {
             if ($attempt -lt 4) { Start-Sleep -Seconds 5 }
         }
     }
+    try{[void](Invoke-ManagedReminder 'finish' @{reminderIds=@($managed.reminderIds);ok=$false;error=$lastError.Message})}catch{}
     throw $lastError
 }
 
@@ -93,14 +115,22 @@ function Wait-ForExactProcesses($State, [int]$Seconds = 3) {
     return @((Get-ExactProcesses $State).Matches)
 }
 
+$jobClaim = $null
+$jobSucceeded = $false
 try {
+    $jobClaim = Invoke-JobState 'claim-job' @{ version = $TaskVersion }
+    if (-not [bool]$jobClaim.claimed) { Write-WorkerLog ('Skipped stale managed job {0}' -f $JobId); exit 0 }
     $state = Get-TimerState
     if (-not $state) { exit 0 }
+    if ([int]$state.version -ne $TaskVersion -or [string]$state.status -in @('cancelled','failed','closed','already_closed')) {
+        Write-WorkerLog ('Skipped stale or inactive timer {0} version {1}' -f $TaskId, $TaskVersion)
+        exit 0
+    }
 
     if ($Mode -eq 'Reminder') {
         $message = '真白，{0}的游玩时间到了，请保存并关闭游戏。{1}分钟后仍未关闭，电脑会强制退出游戏。' -f $state.display_name, $state.force_after
         try {
-            Send-Weixin $message
+            Send-Weixin $message 'user' 4 ("game-reminder:"+$TaskId)
             Update-TimerState @{ status = 'reminded'; reminded_at = [DateTimeOffset]::UtcNow.ToString('o'); error = $null }
         } catch {
             Update-TimerState @{ status = 'reminder_failed'; error = $_.Exception.Message }
@@ -128,7 +158,7 @@ try {
             } else {
                 '真白，{0}已正常关闭。' -f $state.display_name
             }
-            try { Send-Weixin $message } catch {}
+            try { Send-Weixin $message 'user' 4 ("game-result:"+$TaskId) } catch {}
         } elseif (@($initial.AllNamed).Count -gt 0) {
             Update-TimerState @{ status = 'path_mismatch'; closed_pids_json = '[]'; error = 'process name matched but executable path did not' }
         } else {
@@ -140,11 +170,13 @@ try {
             if (-not $FixtureQueueVault) { Start-ScheduledTask -TaskName 'MashiroBot-GameLocker-Reconcile' -ErrorAction Stop }
         }
     }
+    $jobSucceeded = $true
 } catch {
     Write-WorkerLog ('Worker failed for task {0}: {1}' -f $TaskId, $_.Exception.Message)
     try { Update-TimerState @{ status = 'worker_failed'; error = $_.Exception.Message } } catch {}
     exit 1
 } finally {
+    try { if ($jobClaim -and [bool]$jobClaim.claimed) { [void](Invoke-JobState 'complete-job' @{ version=$TaskVersion; ok=$jobSucceeded }) } } catch {}
     if (-not $DryRun) {
         Unregister-ScheduledTask -TaskName $ScheduledTaskName -Confirm:$false -ErrorAction SilentlyContinue
     }

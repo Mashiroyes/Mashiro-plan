@@ -186,16 +186,17 @@ class EnglishSkillsTests(unittest.TestCase):
         self.assertEqual(future["totals"]["reading"], 90)
 
     def test_custom_keyword_add_list_remove_reclassifies_existing_plans(self):
-        self.save("2099-01-03", [{"startTime": "09:00", "endTime": "10:30", "title": "上古卷轴5wiki"}])
+        keyword = "测试英语书目关键词"
+        self.save("2099-01-03", [{"startTime": "09:00", "endTime": "10:30", "title": keyword}])
         before = self.cli("query-english-skills", "--from", "2099-01-03", "--to", "2099-01-03", "--granularity", "day")
         self.assertEqual(before["totals"]["reading"], 0)
-        added = self.cli("manage-english-keywords", "--action", "add", "--category", "阅读", "--keyword", "上古卷轴5wiki")
+        added = self.cli("manage-english-keywords", "--action", "add", "--category", "阅读", "--keyword", keyword)
         self.assertTrue(added["changed"])
         after_add = self.cli("query-english-skills", "--from", "2099-01-03", "--to", "2099-01-03", "--granularity", "day")
         self.assertEqual(after_add["totals"]["reading"], 90)
         listed = self.cli("manage-english-keywords", "--action", "list")
-        self.assertIn("上古卷轴5wiki", listed["keywords"]["reading"]["custom"])
-        removed = self.cli("manage-english-keywords", "--action", "remove", "--category", "阅读", "--keyword", "上古卷轴5wiki")
+        self.assertIn(keyword, listed["keywords"]["reading"]["custom"])
+        removed = self.cli("manage-english-keywords", "--action", "remove", "--category", "阅读", "--keyword", keyword)
         self.assertTrue(removed["changed"])
         after_remove = self.cli("query-english-skills", "--from", "2099-01-03", "--to", "2099-01-03", "--granularity", "day")
         self.assertEqual(after_remove["totals"]["reading"], 0)

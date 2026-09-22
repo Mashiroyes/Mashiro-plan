@@ -1,0 +1,33 @@
+{
+  "createdAt": "2026-09-22T13:01:00+08:00",
+  "reason": "Remove obsolete backups and superseded runtime/code after the shared control-plane migration.",
+  "preserved": [
+    "sqlite/openclaw-planner.sqlite",
+    "sqlite/backups/control",
+    "%LOCALAPPDATA%/MashiroBot/english-skills/runtime-v1"
+  ],
+  "removed": [
+    {
+      "scope": "sqlite/backups direct children except control",
+      "count": 52,
+      "bytes": 18161664
+    },
+    {
+      "scope": "%LOCALAPPDATA%/MashiroBot/english-skills/runtime-v1.previous-*",
+      "count": 17
+    },
+    {
+      "scope": "plugin/mashirobot-plugin-game-timer/audit/windows/bin and obj",
+      "count": 2
+    },
+    {
+      "scope": "plugin/mashirobot-plugin-game-timer/powershell/AppTimer.ps1",
+      "count": 1
+    },
+    {
+      "scope": "plugin/mashirobot-plugin-game-timer/block/powershell/block-worker-v1.ps1",
+      "count": 1
+    }
+  ],
+  "recovery": "A verified current SQLite backup is retained by sqlite/backups/control/manifest.json. Deleted previous runtime copies and build outputs are reproducible from the current source; AppTimer.ps1 remains recoverable from Git history."
+}

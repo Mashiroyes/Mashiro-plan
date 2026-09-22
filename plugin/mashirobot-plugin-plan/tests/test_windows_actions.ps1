@@ -54,11 +54,13 @@ try {
     Invoke-Entry @('-Action','SetGeneralReminder') $true | Out-Null
     Invoke-Entry @('-Action','RunGeneralReminder') $true | Out-Null
 
-    $shower = Invoke-Entry @('-Action','Shower')
-    Assert-True ($shower -eq '真白，该洗澡啦。洗完就准备打卡和睡觉。') 'Shower text changed.'
+    $shower = Invoke-Entry @('-Action','Shower','-DryRun')
+    Assert-True ($shower -eq 'NO_REPLY') 'Shower worker output changed.'
     $future = [DateTimeOffset]::Now.AddDays(30).ToString('yyyy-MM-ddTHH:mm:sszzz')
     $startNight = Invoke-Entry @('-Action','StartNight','-DryRun')
-    Assert-True ($startNight -eq '真白，先确认单词有没有打卡。打完后回复“已打卡”，睡下后回复“已睡觉”。') 'StartNight text changed.'
+    Assert-True ($startNight -eq 'NO_REPLY') 'StartNight worker output changed.'
+    Assert-True (-not $allSource.Contains('先确认单词有没有打卡')) 'Night reminder still asks for a word check-in.'
+    Assert-True (-not $allSource.Contains('先把单词打卡完成')) 'Night polling still asks for a word check-in.'
     $shanghaiNow = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, 'China Standard Time')
     $routineDate = if ($shanghaiNow.Hour -lt 6) { $shanghaiNow.AddDays(-1).ToString('yyyy-MM-dd') } else { $shanghaiNow.ToString('yyyy-MM-dd') }
     $routineRead = & $python $planner get-plugin-state --plugin-id mashirobot-plugin-plan --state-key ('night:' + $routineDate) | ConvertFrom-Json -AsHashtable
@@ -73,14 +75,6 @@ try {
     Write-WakeupState -State $wakeupTestState
     $wakeupRead = Read-WakeupState
     Assert-True ($null -ne $wakeupRead -and [int]$wakeupRead.intervalMinutes -eq 10) 'Wakeup SQLite state round-trip failed.'
-
-    $fixed = (Invoke-Entry @('-Action','InstallFixed','-DryRun')) | ConvertFrom-Json
-    Assert-True (@($fixed).Count -eq 2) 'InstallFixed did not produce two definitions.'
-    foreach ($item in @($fixed)) {
-        Assert-True ([bool]$item.WakeToRun) "WakeToRun missing for $($item.TaskName)."
-        Assert-True ([bool]$item.StartWhenAvailable) "StartWhenAvailable missing for $($item.TaskName)."
-        Assert-True ([string]$item.Action -match '\\plan\\plugin\\mashirobot-plugin-plan\\windows\\routine-reminder\.ps1') "Fixed task uses the wrong root: $($item.Action)"
-    }
 
     $planPayload = @{
         date = '2099-01-01'
@@ -108,10 +102,18 @@ try {
     Assert-True ([string]$general.Action -match '\\plan\\plugin\\mashirobot-plugin-plan\\windows\\routine-reminder\.ps1') 'General reminder uses the wrong root.'
     Assert-True ($null -eq (Get-ScheduledTask -TaskName $general.TaskName -ErrorAction SilentlyContinue)) 'DryRun created a Windows task.'
 
-    $diskOutput = & pwsh -NoProfile -File (Join-Path $windowsRoot 'check-disk-space.ps1') 2>&1
+    $diskOutput = & pwsh -NoProfile -File (Join-Path $windowsRoot 'check-disk-space.ps1') -DryRun 2>&1
     Assert-True ($LASTEXITCODE -eq 0) "Disk-space checker failed with temporary DB: $($diskOutput -join [Environment]::NewLine)"
-    $diskRead = & $python $planner get-plugin-state --plugin-id mashirobot-plugin-plan --state-key 'disk-space:20gb' | ConvertFrom-Json -AsHashtable
+    $diskRead = & $python $planner get-plugin-state --plugin-id mashirobot-plugin-plan --state-key 'disk-space:severity-v1' | ConvertFrom-Json -AsHashtable
     Assert-True ([bool]$diskRead.found) 'Disk-space state was not written to the temporary SQLite database.'
+    $fixture20 = @(@{DeviceID='Z:';FreeSpace=15GB;Size=2TB}) | ConvertTo-Json -Compress
+    & pwsh -NoProfile -File (Join-Path $windowsRoot 'check-disk-space.ps1') -DryRun -Today '2026-09-22' -DriveFixtureJson $fixture20 | Out-Null
+    $ordinary = & $python $planner get-plugin-state --plugin-id mashirobot-plugin-plan --state-key 'disk-space:severity-v1' | ConvertFrom-Json -AsHashtable
+    Assert-True ([int]$ordinary.value.'Z:'.severity -eq 1) 'Disk ordinary threshold was not persisted.'
+    $fixture5 = @(@{DeviceID='Z:';FreeSpace=4GB;Size=2TB}) | ConvertTo-Json -Compress
+    & pwsh -NoProfile -File (Join-Path $windowsRoot 'check-disk-space.ps1') -DryRun -Today '2026-09-22' -DriveFixtureJson $fixture5 | Out-Null
+    $urgent = & $python $planner get-plugin-state --plugin-id mashirobot-plugin-plan --state-key 'disk-space:severity-v1' | ConvertFrom-Json -AsHashtable
+    Assert-True ([int]$urgent.value.'Z:'.severity -eq 3) 'Disk same-day escalation was not persisted.'
 
     $init = & $python $planner init | ConvertFrom-Json
     Assert-True ($init.dbPath -eq $env:OPENCLAW_PLANNER_DB_PATH) 'Test did not use its temporary database.'

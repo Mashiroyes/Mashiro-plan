@@ -10,10 +10,17 @@ from PIL import Image
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN_ROOT / "planner"))
-from english_skills_chart import COLORS, generate_english_skills_chart, heat_strength  # noqa: E402
+from english_skills_chart import COLORS, daily_average_minutes, generate_english_skills_chart, heat_strength  # noqa: E402
 
 
 class EnglishSkillsChartTests(unittest.TestCase):
+    def test_daily_average_uses_inclusive_calendar_days(self):
+        payload = {
+            "fromDate": "2026-09-01", "toDate": "2026-09-10",
+            "totals": {"listening": 100, "speaking": 100, "reading": 100, "writing": 100, "anki": 100},
+        }
+        self.assertEqual(daily_average_minutes(payload), 40)
+
     def test_heatmap_uses_fixed_daily_intensity_thresholds(self):
         self.assertLess(heat_strength(60), 0.30)
         self.assertAlmostEqual(heat_strength(90), 0.45)
@@ -22,6 +29,7 @@ class EnglishSkillsChartTests(unittest.TestCase):
         self.assertAlmostEqual(heat_strength(720), 1.0)
 
     def test_chart_has_expected_size_and_colors(self):
+        self.assertNotIn("anki", COLORS)
         payload = {
             "fromDate": "2026-08-03", "toDate": "2026-08-09",
             "totals": {"listening": 60, "speaking": 40, "reading": 120, "writing": 30, "anki": 60},

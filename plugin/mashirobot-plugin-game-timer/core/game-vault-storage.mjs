@@ -26,6 +26,8 @@ function openDatabase(sqlitePath) {
     updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_game_vault_due ON game_executable_vault(state, restore_due_at);`);
+  const columns = new Set(db.prepare("PRAGMA table_info(game_executable_vault)").all().map((row) => row.name));
+  if (!columns.has("operation_id")) db.exec("ALTER TABLE game_executable_vault ADD COLUMN operation_id TEXT");
   return db;
 }
 
@@ -34,7 +36,7 @@ function map(row) {
   return { id: row.id, taskId: row.task_id, gameKey: row.game_key, displayName: row.display_name,
     originalPath: row.original_path, vaultPath: row.vault_path, sha256: row.sha256, state: row.state,
     requestedAt: row.requested_at, protectedAt: row.protected_at, restoreDueAt: row.restore_due_at,
-    restoredAt: row.restored_at, restoreTaskName: row.restore_task_name, error: row.error, updatedAt: row.updated_at };
+    restoredAt: row.restored_at, restoreTaskName: row.restore_task_name, operationId: row.operation_id, error: row.error, updatedAt: row.updated_at };
 }
 
 export function createGameVaultStore(sqlitePath) {

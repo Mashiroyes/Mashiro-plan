@@ -60,10 +60,11 @@ test("plan plugin README is the complete operational reference", async () => {
   }
 });
 
-test("root README links menu 5 without duplicating financial plugin internals", async () => {
+test("root README assigns menu 5 to language learning and excludes the disabled financial plugin from numbering", async () => {
   const root = await readFile(rootReadmePath, "utf8");
-  assert.match(root, /\|\s*5\s*\|\s*`plugin\\mashirobot-plugin-financial-report`\s*\|/);
-  assert.match(root, /\(plugin\/mashirobot-plugin-financial-report\/README\.md\)/);
+  assert.match(root, /\|\s*5\s*\|\s*`plugin\\mashirobot-plugin-language`\s*\|/);
+  assert.doesNotMatch(root, /\|\s*5\s*\|\s*`plugin\\mashirobot-plugin-financial-report`\s*\|/);
+  assert.match(root, /mashirobot-plugin-financial-report.*禁用状态.*不占用任何菜单编号/u);
   for (const internal of ["financial_report_course_state", "补学招股书第N课", "agent:main:financial-report-feedback:"]) {
     assert.equal(root.includes(internal), false);
   }

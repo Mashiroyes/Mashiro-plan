@@ -29,5 +29,5 @@ test("game scheduling yields while the external scheduler is pending", async (t)
   await Promise.resolve().then(() => { concurrent = true; });
   assert.equal(concurrent, true);
   release();
-  assert.match((await pending).reply, /已设置 Game/u);
+  assert.match((await pending).reply, /已设置 G\d{3} Game/u);
 });

@@ -21,8 +21,10 @@ function Register-PlanReminderTask {
     $start = [DateTimeOffset]::Parse([string]$Item.startAt)
     $workerPath = Join-Path $PSScriptRoot 'plan-reminder-worker.ps1'
     $pwshPath = (Get-Command pwsh.exe -ErrorAction Stop).Source
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -ItemId "{1}" -TaskName "{2}" -OperationId "{3}"' -f `
-        $workerPath, [string]$Item.id, $taskName, $OperationId
+    $jobId = 'plan:' + [string]$Item.id
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -ItemId "{1}" -TaskName "{2}" -OperationId "{3}" -JobId "{4}" -JobVersion {5}' -f `
+        $workerPath, [string]$Item.id, $taskName, $OperationId, $jobId, 1
+    $job = if ($DryRun) { [pscustomobject]@{jobId=$jobId;version=1} } else { Invoke-ControlJob -Action 'upsert' -Payload @{jobId=$jobId;version=1;owner='mashirobot-plugin-plan';kind='plan-reminder';taskName=$taskName;runAt=$start.ToString('o');payload=@{itemId=[string]$Item.id;execution=@{executable=$pwshPath;arguments=$arguments}}} }
     $taskAction = New-ScheduledTaskAction -Execute $pwshPath -Argument $arguments
     $trigger = New-ScheduledTaskTrigger -Once -At $start.LocalDateTime
     $settings = New-ScheduledTaskSettingsSet `
@@ -84,6 +86,8 @@ $result | Add-Member -NotePropertyName operationId -NotePropertyValue $Operation
 if ($Action -in @('SavePlan', 'ModifyItem')) {
     $taskErrors = @()
     foreach ($oldTask in @($result.canceledTasks)) {
+        try { if (-not $DryRun) { Invoke-ControlJob -Action 'cancel-task' -Payload @{taskName=[string]$oldTask} | Out-Null } }
+        catch { $taskErrors += $_.Exception.Message }
         if (-not $DryRun) {
             try { Remove-OpenClawPlanTask -TaskName ([string]$oldTask) }
             catch { $taskErrors += $_.Exception.Message }

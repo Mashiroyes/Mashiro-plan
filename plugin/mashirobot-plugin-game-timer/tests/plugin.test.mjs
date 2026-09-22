@@ -30,6 +30,13 @@ function fixture() {
   };
 }
 
+async function addPermanent(command, context) {
+  const preview = await handle(command, context);
+  const actionId = preview.reply.match(/确认禁止\s+(B[0-9A-F]{3})/u)?.[1];
+  assert.ok(actionId, `missing confirmation id in: ${preview.reply}`);
+  return handle(`确认禁止 ${actionId}`, context);
+}
+
 test("add game reports inferred name and duplicate remains single", async () => {
   const f = fixture();
   try {
@@ -110,7 +117,7 @@ test("confirmed block-rule deletion synchronizes and removes the selected rows",
   try {
     const context = { ...f.context, blockSyncer: { async apply() { return { ok: true }; } } };
     await handle("禁止下载QQ7天", context);
-    await handle("禁止访问bilibili.com永久", context);
+    await addPermanent("禁止访问bilibili.com永久", context);
     assert.match((await handle("删除禁止规则1，2", context)).reply, /准备删除/u);
     assert.match((await handle("确认删除", context)).reply, /已删除 2 条禁止规则/u);
     assert.match((await handle("查询禁止名单", context)).reply, /当前没有生效/u);

@@ -5,6 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import * as plugin from "../index.mjs";
 
+async function addPermanent(command, context) {
+  const preview = await plugin.handle(command, context);
+  const actionId = preview.reply.match(/确认禁止\s+(B[0-9A-F]{3})/u)?.[1];
+  assert.ok(actionId, `missing confirmation id in: ${preview.reply}`);
+  return plugin.handle(`确认禁止 ${actionId}`, context);
+}
+
 test("handles list and rule creation with an injected syncer", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-plugin-"));
   try {
@@ -36,8 +43,8 @@ test("explicit release updates today's default and plain release uses the latest
       now: new Date("2026-08-07T00:00:00Z"),
       blockSyncer: { async apply(args) { calls.push(args); return { ok: true }; } },
     };
-    await plugin.handle("禁止访问bilibili.com永久", context);
-    await plugin.handle("禁止访问zhihu.com永久", context);
+    await addPermanent("禁止访问bilibili.com永久", context);
+    await addPermanent("禁止访问zhihu.com永久", context);
     assert.match((await plugin.handle("解除bilibili10分钟", context)).reply, /默认网站：bilibili\.com/u);
     context.now = new Date("2026-08-07T00:01:00Z");
     assert.match((await plugin.handle("解除zhihu.com20分钟", context)).reply, /默认网站：zhihu\.com/u);
@@ -57,8 +64,8 @@ test("plain release defaults to bilibili on a new Shanghai day", async () => {
       now: new Date("2026-08-07T00:00:00Z"),
       blockSyncer: { async apply() { return { ok: true }; } },
     };
-    await plugin.handle("禁止访问bilibili.com永久", context);
-    await plugin.handle("禁止访问zhihu.com永久", context);
+    await addPermanent("禁止访问bilibili.com永久", context);
+    await addPermanent("禁止访问zhihu.com永久", context);
     await plugin.handle("解除zhihu.com10分钟", context);
     context.now = new Date("2026-08-08T00:00:00Z");
     assert.match((await plugin.handle("解除10分钟", context)).reply, /已临时解除 bilibili\.com/u);
@@ -74,7 +81,7 @@ test("rejects a release that exceeds the website morning quota without syncing",
       sqlitePath: path.join(root, "planner.sqlite"), now: new Date("2026-09-22T01:00:00Z"),
       blockSyncer: { async apply(args) { calls.push(args); return { ok: true }; } },
     };
-    await plugin.handle("禁止访问bilibili.com永久", context);
+    await addPermanent("禁止访问bilibili.com永久", context);
     assert.match((await plugin.handle("解除bilibili20分钟", context)).reply, /上午剩余 0 分钟/u);
     const callsAfterAccepted = calls.length;
     context.now = new Date("2026-09-22T01:20:00Z");
@@ -92,7 +99,7 @@ test("reports separate remaining quotas for a cross-period release", async () =>
       sqlitePath: path.join(root, "planner.sqlite"), now: new Date("2026-09-22T03:50:00Z"),
       blockSyncer: { async apply() { return { ok: true }; } },
     };
-    await plugin.handle("禁止访问bilibili.com永久", context);
+    await addPermanent("禁止访问bilibili.com永久", context);
     const reply = (await plugin.handle("解除bilibili20分钟", context)).reply;
     assert.match(reply, /上午剩余 10 分钟/u);
     assert.match(reply, /下午剩余 20 分钟/u);
@@ -106,7 +113,7 @@ test("immediate restore stops quota usage at the restore time", async () => {
       sqlitePath: path.join(root, "planner.sqlite"), now: new Date("2026-09-22T01:00:00Z"),
       blockSyncer: { async apply() { return { ok: true }; } },
     };
-    await plugin.handle("禁止访问bilibili.com永久", context);
+    await addPermanent("禁止访问bilibili.com永久", context);
     await plugin.handle("解除bilibili20分钟", context);
     context.now = new Date("2026-09-22T01:05:00Z");
     await plugin.handle("立即恢复bilibili", context);
@@ -123,7 +130,7 @@ test("block-rule deletion uses unified numbering and requires confirmation", asy
       blockSyncer: { async apply() { return { ok: true }; } },
     };
     await plugin.handle("禁止下载QQ7天", context);
-    await plugin.handle("禁止访问bilibili.com永久", context);
+    await addPermanent("禁止访问bilibili.com永久", context);
     const list = await plugin.handle("查询禁止名单", context);
     assert.match(list.reply, /1\. \[软件\] QQ[\s\S]*2\. \[网站\] bilibili\.com/u);
     assert.match((await plugin.handle("删除禁止规则3", context)).reply, /未删除任何规则/u);

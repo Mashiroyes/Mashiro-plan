@@ -1,8 +1,26 @@
 import { createPlanRuntime } from "../bridge/planner-runner.mjs";
-import { dateFromParts, shanghaiParts, shiftDate } from "../shared/dates.mjs";
+import { dateFromParts, shanghaiIso, shanghaiParts, shiftDate } from "../shared/dates.mjs";
+
+function parseRelativeReminder(raw, now) {
+  const match = /^(\d+(?:\.\d+)?)\s*(分钟|分|h|小时)后\s*提醒我\s*(.*)$/iu.exec(raw);
+  if (!match) return null;
+  const unit = match[2].toLocaleLowerCase("zh-CN");
+  const minutes = Math.round(Number(match[1]) * (unit === "h" || unit === "小时" ? 60 : 1));
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 30 * 24 * 60) {
+    return { error: "间隔提醒请填写 1 分钟到 30 天，例如“3分钟后提醒我吃饭”或“8h后提醒我吃饭”。" };
+  }
+  const content = match[3].replace(/^[\s,，:：。]+/, "").trim();
+  if (!content) return { error: "提醒内容不能为空，请在时间后写明要提醒的事情。" };
+  return {
+    content,
+    startAt: shanghaiIso(new Date(new Date(now).getTime() + minutes * 60_000)),
+  };
+}
 
 export function parseGeneralReminder(rawText, now = new Date()) {
   const raw = String(rawText).trim();
+  const relative = parseRelativeReminder(raw, now);
+  if (relative) return relative;
   const opening = /^提醒我\s*/.exec(raw);
   const timeFirst = /^(?:(\d{1,2})点(?:(\d{1,2})分)?|(\d{1,2}):(\d{1,2}))\s*提醒我\s*/.exec(raw);
   if (!opening && !timeFirst) return null;
@@ -92,6 +110,11 @@ export async function handleReminder(rawText, context = {}) {
       Message: parsed.content,
     });
     if (result?.verifiedDatabase === true && result?.verifiedTasks === true) {
+      context.undoManager?.record({
+        scope: `${context.accountId ?? "global"}:${context.conversationId ?? "global"}`,
+        owner: "mashirobot-plugin-plan", actionKind: "general-reminder",
+        description: `提醒你${parsed.content}`, inversePayload: { reminderId: result.ReminderId, taskName: result.TaskName },
+      });
       return {
         command: "设置通用提醒",
         reply: `已设置：${parsed.startAt.slice(0, 10)} ${parsed.startAt.slice(11, 16)} 提醒你${parsed.content}。未回复“收到”时每 5 分钟提醒一次。`,

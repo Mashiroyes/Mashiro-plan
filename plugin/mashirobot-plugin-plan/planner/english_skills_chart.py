@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -9,14 +10,13 @@ from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 WIDTH = 1600
 HEIGHT = 1460
-SKILLS = ("listening", "speaking", "reading", "writing", "anki")
-LABELS = {"listening": "听", "speaking": "说", "reading": "读", "writing": "写", "anki": "Anki"}
+SKILLS = ("listening", "speaking", "reading", "writing")
+LABELS = {"listening": "听", "speaking": "说", "reading": "读", "writing": "写"}
 COLORS = {
     "listening": "#2563EB",
     "speaking": "#F97316",
     "reading": "#16A34A",
     "writing": "#9333EA",
-    "anki": "#0EA5E9",
 }
 FONT_REGULAR = Path(r"C:\Windows\Fonts\msyh.ttc")
 FONT_BOLD = Path(r"C:\Windows\Fonts\msyhbd.ttc")
@@ -35,6 +35,39 @@ def duration_text(minutes: float) -> str:
     return f"{hours} 小时" + (f" {rest} 分钟" if rest else "")
 
 
+def daily_average_minutes(payload: dict[str, Any]) -> float:
+    totals = payload.get("totals") or {}
+    total = sum(max(0, float(totals.get(skill) or 0)) for skill in SKILLS)
+    try:
+        start = date.fromisoformat(str(payload.get("fromDate") or ""))
+        end = date.fromisoformat(str(payload.get("toDate") or ""))
+        days = max(1, (end - start).days + 1)
+    except ValueError:
+        days = max(1, len(payload.get("points") or []))
+    return total / days
+
+
+def draw_summary_statistics(draw: ImageDraw.ImageDraw, payload: dict[str, Any]) -> None:
+    totals = payload.get("totals") or {}
+    total = sum(max(0, float(totals.get(skill) or 0)) for skill in SKILLS)
+    heading_font = font(34, True)
+    average = daily_average_minutes(payload)
+    target = payload.get("dailyTargetMinutes")
+    draw.text((680, 25), "平均每天", font=heading_font, fill="#475569")
+    draw.text((850, 25), duration_text(average), font=heading_font, fill="#0F172A")
+    draw.text((680, 90), "目标", font=heading_font, fill="#475569")
+    if isinstance(target, (int, float)) and 0 < float(target) <= 1440:
+        target_value = float(target)
+        draw.text((850, 90), duration_text(target_value), font=heading_font, fill="#0F172A")
+        delta = average - target_value
+        comparison = f"高于目标 {duration_text(delta)}" if delta >= 0 else f"低于目标 {duration_text(-delta)}"
+        draw.text((850, 138), comparison, font=font(20, True), fill="#16A34A" if delta >= 0 else "#DC2626")
+    else:
+        draw.text((850, 90), "未设置", font=heading_font, fill="#64748B")
+    draw.text((1195, 25), "总时长", font=heading_font, fill="#475569")
+    draw.text((1195, 72), duration_text(total), font=heading_font, fill="#0F172A")
+
+
 def draw_pie(draw: ImageDraw.ImageDraw, payload: dict[str, Any]) -> None:
     totals = payload.get("totals") or {}
     values = [max(0, float(totals.get(skill) or 0)) for skill in SKILLS]
@@ -42,7 +75,7 @@ def draw_pie(draw: ImageDraw.ImageDraw, payload: dict[str, Any]) -> None:
     bounds = (75, 160, 585, 670)
     if total <= 0:
         draw.ellipse(bounds, fill="#E2E8F0", outline="#CBD5E1", width=3)
-        draw.text((205, 380), "暂无五项记录", font=font(30, True), fill="#475569")
+        draw.text((205, 380), "暂无四项记录", font=font(30, True), fill="#475569")
     else:
         start = -90.0
         for skill, value in zip(SKILLS, values):
@@ -50,14 +83,15 @@ def draw_pie(draw: ImageDraw.ImageDraw, payload: dict[str, Any]) -> None:
             if sweep > 0:
                 draw.pieslice(bounds, start=start, end=start + sweep, fill=COLORS[skill], outline="#FFFFFF", width=3)
             start += sweep
-    draw.text((680, 155), "五项学习占比", font=font(34, True), fill="#0F172A")
-    percentages = payload.get("percentages") or {}
+    draw.text((680, 235), "四项学习占比", font=font(34, True), fill="#0F172A")
     for index, skill in enumerate(SKILLS):
-        y = 225 + index * 100
+        value = values[index]
+        y = 305 + index * 100
         draw.rounded_rectangle((685, y, 745, y + 60), radius=10, fill=COLORS[skill])
         draw.text((775, y - 2), LABELS[skill], font=font(30, True), fill="#0F172A")
         draw.text((850, y), duration_text(values[index]), font=font(27), fill="#334155")
-        draw.text((1195, y), f"{float(percentages.get(skill) or 0):.1f}%", font=font(30, True), fill=COLORS[skill])
+        percentage = value / total * 100 if total else 0.0
+        draw.text((1195, y), f"{percentage:.1f}%", font=font(30, True), fill=COLORS[skill])
 
 
 def label_step(count: int) -> int:
@@ -139,9 +173,10 @@ def generate_english_skills_chart(payload: dict[str, Any], output_path: str | Pa
     output.parent.mkdir(parents=True, exist_ok=True)
     image = Image.new("RGB", (WIDTH, HEIGHT), "#FFFFFF")
     draw = ImageDraw.Draw(image)
-    draw.text((54, 35), "英语五项学习仪表盘", font=font(44, True), fill="#0F172A")
+    draw.text((54, 35), "英语四项学习仪表盘", font=font(44, True), fill="#0F172A")
     draw.text((58, 98), f"{payload.get('fromDate', '')} 至 {payload.get('toDate', '')} · 计划时长", font=font(25), fill="#475569")
     draw_pie(draw, payload)
+    draw_summary_statistics(draw, payload)
     draw_heatmap(draw, points)
     footer_y = 1390
     warning = str(payload.get("warning") or "")

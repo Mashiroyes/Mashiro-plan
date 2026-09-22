@@ -34,6 +34,10 @@ $dbHelper = Join-Path $workerRoot 'game-timer-db-v1.mjs'
 [IO.Directory]::CreateDirectory($workerRoot) | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'game-timer-worker-v1.ps1') -Destination $worker -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'game-timer-db-v1.mjs') -Destination $dbHelper -Force
+$controlSource = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\core\control'))
+$controlTarget = Join-Path $workerRoot 'control'
+if (Test-Path -LiteralPath $controlTarget) { Remove-Item -LiteralPath $controlTarget -Recurse -Force }
+Copy-Item -LiteralPath $controlSource -Destination $controlTarget -Recurse -Force
 
 $shortId = ([string]$payload.id).Replace('-', '').Substring(0, 12)
 $reminderTaskName = "OpenClaw-GameTimer-Reminder-$shortId"
@@ -53,7 +57,8 @@ if (-not (Test-Path -LiteralPath $pwshPath -PathType Leaf)) {
 }
 
 function Register-TimerTask([string]$Name, [string]$WorkerMode, [string]$AtValue) {
-    $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Mode {1} -TaskId "{2}" -SqlitePath "{3}" -ScheduledTaskName "{4}"' -f $worker, $WorkerMode, $payload.id, $SqlitePath, $Name
+    $jobId = if ($WorkerMode -eq 'Reminder') { [string]$payload.reminderJobId } else { [string]$payload.forceJobId }
+    $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Mode {1} -TaskId "{2}" -TaskVersion "{3}" -JobId "{4}" -SqlitePath "{5}" -ScheduledTaskName "{6}"' -f $worker, $WorkerMode, $payload.id, $payload.version, $jobId, $SqlitePath, $Name
     if ([bool]$payload.dryRun) { $arguments += ' -DryRun' }
     $action = New-ScheduledTaskAction -Execute $pwshPath -Argument $arguments
     $at = [DateTimeOffset]::Parse($AtValue)

@@ -11,6 +11,13 @@ import { createPluginRouter } from "../../../core/router/plugin-router.mjs";
 import { createPlanRuntime } from "../bridge/planner-runner.mjs";
 import { getHelp, handle, healthCheck, match } from "../index.mjs";
 import { parseGeneralReminder } from "../routes/reminder.mjs";
+
+test("parses relative reminders in minutes", () => {
+  assert.deepEqual(parseGeneralReminder("3分钟后提醒我吃饭", new Date("2026-09-22T02:00:00Z")), {
+    content: "吃饭",
+    startAt: "2026-09-22T10:03:00+08:00",
+  });
+});
 import {
   normalizePlanInput,
   parsePlanDate,
@@ -118,6 +125,9 @@ async function createFixture(t, now = new Date("2026-08-03T09:00:00+08:00")) {
           }),
         ]);
         return { message: `已设置 ${args.StartAt.slice(0, 16).replace("T", " ")} 的起床提醒。`, verifiedDatabase: true, verifiedTasks: true, partialFailure: false };
+      }
+      if (action === "SetDeferredNightReminder") {
+        return { verifiedTasks: true, taskName: args.TaskName, startAt: args.StartAt };
       }
       if (action === "GetWakeup") return { message: "当前起床提醒：2026-08-04 07:00。", verifiedDatabase: true, verifiedTasks: true };
       if (action === "CancelWakeup") {
@@ -374,6 +384,57 @@ test("keeps exact completion keywords and SQLite runtime state before GPT", asyn
   }
 });
 
+test("defers an active sleep reminder until the requested time", async (t) => {
+  const fixture = await createFixture(t, new Date("2026-08-02T23:10:00+08:00"));
+  await fixture.baseRuntime.runPlanner([
+    "set-plugin-state",
+    "--plugin-id",
+    "mashirobot-plugin-plan",
+    "--state-key",
+    "night:2026-08-02",
+    "--payload-base64",
+    payloadBase64({ routineDate: "2026-08-02", wordChecked: false, slept: false }),
+  ]);
+  assert.equal(match("睡觉时间延迟到1点05分", fixture.context), true);
+  const result = await handle("睡觉时间延迟到1点05分", fixture.context);
+  assert.equal(result.command, "睡觉时间延迟到1点05分");
+  assert.match(result.reply, /01:05/);
+  assert.deepEqual(fixture.routineActions.at(-1), {
+    action: "SetDeferredNightReminder",
+    args: { StartAt: "2026-08-03T01:05:00+08:00", TaskName: "MashiroBot-NightDeferred-2026-08-02" },
+  });
+  const db = new DatabaseSync(fixture.sqlitePath);
+  try {
+    const row = db.prepare("SELECT value_json FROM plugin_runtime_state WHERE state_key='night:2026-08-02'").get();
+    assert.equal(JSON.parse(row.value_json).remindAfter, "2026-08-03T01:05:00+08:00");
+  } finally {
+    db.close();
+  }
+});
+
+test("rejects a sleep reminder delay beyond the current reminder window", async (t) => {
+  const fixture = await createFixture(t, new Date("2026-08-02T23:10:00+08:00"));
+  await fixture.baseRuntime.runPlanner([
+    "set-plugin-state",
+    "--plugin-id",
+    "mashirobot-plugin-plan",
+    "--state-key",
+    "night:2026-08-02",
+    "--payload-base64",
+    payloadBase64({ routineDate: "2026-08-02", slept: false }),
+  ]);
+  const result = await handle("睡觉时间延迟到3点00分", fixture.context);
+  assert.match(result.reply, /最晚次日2点50分/);
+});
+
+test("sleep reminders support a 30 minute defer and tonight-only dismissal", async (t) => {
+  const fixture = await createFixture(t, new Date("2026-08-02T23:10:00+08:00"));
+  await fixture.baseRuntime.runPlanner(["set-plugin-state", "--plugin-id", "mashirobot-plugin-plan", "--state-key", "night:2026-08-02", "--payload-base64", payloadBase64({ routineDate: "2026-08-02", slept: false })]);
+  const delayed = await handle("延迟30分钟", fixture.context); assert.match(delayed.reply, /23:40/);
+  const dismissed = await handle("今晚不再提醒", fixture.context); assert.match(dismissed.reply, /今晚不再提醒/);
+  const db = new DatabaseSync(fixture.sqlitePath); try { const row = db.prepare("SELECT value_json FROM plugin_runtime_state WHERE state_key='night:2026-08-02'").get(); assert.equal(JSON.parse(row.value_json).dismissed, true); } finally { db.close(); }
+});
+
 test("supports bare sleep ranges, reminder acknowledgement, and reminder parsing", async (t) => {
   const fixture = await createFixture(t, new Date("2099-08-03T09:00:00+08:00"));
   await fixture.baseRuntime.runPlanner([
@@ -393,6 +454,11 @@ test("supports bare sleep ranges, reminder acknowledgement, and reminder parsing
   const timeFirstReminder = await handle("11:57提醒我吃饭", fixture.context);
   assert.equal(timeFirstReminder.command, "设置通用提醒");
   assert.match(timeFirstReminder.reply, /11:57 提醒你吃饭/);
+
+  assert.equal(match("8h后提醒我复盘", fixture.context), true);
+  const relativeReminder = await handle("8h后提醒我复盘", fixture.context);
+  assert.equal(relativeReminder.command, "设置通用提醒");
+  assert.match(relativeReminder.reply, /17:00 提醒你复盘/);
 
   const db = new DatabaseSync(fixture.sqlitePath);
   try {
@@ -414,6 +480,14 @@ test("supports bare sleep ranges, reminder acknowledgement, and reminder parsing
   assert.deepEqual(
     parseGeneralReminder("11:57提醒我吃饭", new Date("2026-08-03T09:00:00+08:00")),
     { content: "吃饭", startAt: "2026-08-03T11:57:00+08:00" },
+  );
+  assert.deepEqual(
+    parseGeneralReminder("12点提醒我吃饭", new Date("2026-08-03T09:00:00+08:00")),
+    { content: "吃饭", startAt: "2026-08-03T12:00:00+08:00" },
+  );
+  assert.deepEqual(
+    parseGeneralReminder("8h后提醒我吃饭", new Date("2026-08-03T09:00:00+08:00")),
+    { content: "吃饭", startAt: "2026-08-03T17:00:00+08:00" },
   );
 });
 

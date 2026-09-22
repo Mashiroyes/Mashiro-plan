@@ -16,6 +16,14 @@ $MorningTask = 'MashiroBot Loot Morning'
 $OldTasks = @('OpenClaw-Daily-Water-1000', 'OpenClaw-Daily-EnglishJournal-2100')
 $Pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
 $Node = (Get-Command node.exe -ErrorAction Stop).Source
+$JobCli = Join-Path $PlanRoot 'core\control\job-cli.mjs'
+
+function Invoke-JobCli([string]$Mode,[hashtable]$Payload) {
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($Payload|ConvertTo-Json -Compress -Depth 10)))
+    $raw=& $Node $JobCli $Mode $Sqlite $encoded 2>&1
+    if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)}
+    return (($raw-join'')|ConvertFrom-Json)
+}
 
 function Get-TaskProjection {
     param([string]$Name)
@@ -38,21 +46,22 @@ function Remove-TaskIfPresent {
 function Register-LootTasks {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -MultipleInstances IgnoreNew
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-    $eveningArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Evening -SqlitePath "{1}" -NodePath "{2}"' -f (Join-Path $RuntimePlugin 'windows\loot-worker.ps1'), $Sqlite, $Node
-    $morningArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Morning -SqlitePath "{1}" -NodePath "{2}"' -f (Join-Path $RuntimePlugin 'windows\loot-worker.ps1'), $Sqlite, $Node
+    $eveningJob='loot:evening';$morningJob='loot:morning'
+    $eveningArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Evening -SqlitePath "{1}" -NodePath "{2}" -JobId "{3}" -JobVersion 2' -f (Join-Path $RuntimePlugin 'windows\loot-worker.ps1'), $Sqlite, $Node, $eveningJob
+    $morningArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Morning -SqlitePath "{1}" -NodePath "{2}" -JobId "{3}" -JobVersion 1' -f (Join-Path $RuntimePlugin 'windows\loot-worker.ps1'), $Sqlite, $Node, $morningJob
+    $reconcile=@{executable=$Pwsh;argumentList=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action','Install','-SqlitePath',$Sqlite,'-SourcePluginRoot',$SourcePluginRoot)}
+    Invoke-JobCli 'upsert' @{jobId=$eveningJob;version=2;owner='mashirobot-plugin-loot';kind='loot-evening';taskName=$EveningTask;runAt=([DateTimeOffset]::Now.Date.AddHours(21).AddMinutes(15).ToString('o'));recurrence=@{dailyTimes=@('21:15','21:50')};payload=@{execution=@{executable=$Pwsh;arguments=$eveningArguments};reconcile=$reconcile}}|Out-Null
+    Invoke-JobCli 'upsert' @{jobId=$morningJob;version=1;owner='mashirobot-plugin-loot';kind='loot-morning';taskName=$MorningTask;runAt=([DateTimeOffset]::Now.Date.AddDays(1).AddHours(10).ToString('o'));recurrence=@{dailyTimes=@('10:00')};payload=@{execution=@{executable=$Pwsh;arguments=$morningArguments};reconcile=$reconcile}}|Out-Null
     $eveningAction = New-ScheduledTaskAction -Execute $Pwsh -Argument $eveningArguments
     $morningAction = New-ScheduledTaskAction -Execute $Pwsh -Argument $morningArguments
-    $eveningTriggers = @(21, 21, 21, 21, 21, 21, 22) | ForEach-Object -Begin { $index = 0 } -Process {
-        $minute = if ($index -lt 6) { $index * 10 } else { 0 }
-        $index += 1
-        New-ScheduledTaskTrigger -Daily -At ([DateTime]::Today.AddHours($_).AddMinutes($minute))
-    }
+    $eveningTriggers = @(15, 50) | ForEach-Object { New-ScheduledTaskTrigger -Daily -At ([DateTime]::Today.AddHours(21).AddMinutes($_)) }
     $morningTrigger = New-ScheduledTaskTrigger -Daily -At ([DateTime]::Today.AddHours(10))
     Register-ScheduledTask -TaskName $EveningTask -Action $eveningAction -Trigger $eveningTriggers -Settings $settings -Principal $principal -Force | Out-Null
     Register-ScheduledTask -TaskName $MorningTask -Action $morningAction -Trigger $morningTrigger -Settings $settings -Principal $principal -Force | Out-Null
 }
 
 if ($Action -eq 'Uninstall') {
+    try { Invoke-JobCli 'cancel' @{jobId='loot:evening'} | Out-Null; Invoke-JobCli 'cancel' @{jobId='loot:morning'} | Out-Null } catch {}
     Remove-TaskIfPresent $EveningTask
     Remove-TaskIfPresent $MorningTask
     if (Test-Path -LiteralPath $RuntimeRoot) { Remove-Item -LiteralPath $RuntimeRoot -Recurse -Force }

@@ -8,12 +8,17 @@ const statistics = {
   toDate: "2026-09-16",
   totals: { listening: 60, speaking: 20, reading: 120, writing: 30, anki: 10 },
   percentages: { listening: 25, speaking: 8.3, reading: 50, writing: 12.5, anki: 4.2 },
+  inactivityWarning: "间隔提醒：口语暂无训练记录。",
 };
 
 function fixtureRuntime(overrides = {}) {
   return {
     async runPlanner(args) {
       if (args[0] === "query-english-skills") return statistics;
+      if (args[0] === "get-plugin-state") return { found: false, value: null };
+      if (args[0] === "set-plugin-state") {
+        return { value: JSON.parse(Buffer.from(args[args.indexOf("--payload-base64") + 1], "base64").toString("utf8")) };
+      }
       if (args[0] === "manage-english-keywords") {
         const action = args[args.indexOf("--action") + 1];
         if (action === "list") return { keywords: { reading: { builtIn: ["哈利波特"], custom: [] } } };
@@ -33,28 +38,150 @@ test("matches all statistic aliases", () => {
   }
 });
 
-test("generic statistic phrases default to this week", async () => {
+test("monthly daily targets persist under the selected calendar month", async () => {
+  const calls = [];
+  const runtime = fixtureRuntime({
+    async runPlanner(args) {
+      calls.push(args);
+      return { value: JSON.parse(Buffer.from(args[args.indexOf("--payload-base64") + 1], "base64").toString("utf8")) };
+    },
+  });
+  const result = await handle("7月目标每天时长：2小时30分钟", {
+    planRuntime: runtime, now: new Date("2026-09-22T12:00:00+08:00"),
+  });
+  assert.equal(result.command, "设置英语学习目标");
+  assert.match(result.reply, /2026年7月每日目标：2小时30分钟/u);
+  assert.deepEqual(calls[0].slice(0, 5), ["set-plugin-state", "--plugin-id", "mashirobot-plugin-language", "--state-key", "daily-target:2026-07"]);
+});
+
+test("monthly target accepts the short keyword and h duration", async () => {
+  const calls = [];
+  const runtime = fixtureRuntime({
+    async runPlanner(args) {
+      calls.push(args);
+      return { value: JSON.parse(Buffer.from(args[args.indexOf("--payload-base64") + 1], "base64").toString("utf8")) };
+    },
+  });
+  const result = await handle("本月目标时长：7h", {
+    planRuntime: runtime, now: new Date("2026-09-22T12:00:00+08:00"),
+  });
+  assert.match(result.reply, /2026年9月每日目标：7小时/u);
+  assert.equal(JSON.parse(Buffer.from(calls[0].at(-1), "base64").toString("utf8")).dailyMinutes, 420);
+});
+
+test("a monthly chart carries its saved daily target into the renderer", async () => {
+  let rendered = null;
+  const runtime = fixtureRuntime({
+    async runPlanner(args) {
+      if (args[0] === "query-english-skills") return statistics;
+      if (args[0] === "get-plugin-state") return { found: true, value: { dailyMinutes: 180 } };
+      throw new Error("unexpected command");
+    },
+    async generateEnglishSkillsChart(payload) { rendered = payload; return "cached.png"; },
+  });
+  await handle("本月英语统计图", { planRuntime: runtime, now: new Date("2026-09-22T12:00:00+08:00") });
+  assert.equal(rendered.dailyTargetMinutes, 180);
+});
+
+test("study-duration simulations use real monthly points without changing them", async () => {
+  const monthlyStatistics = {
+    fromDate: "2026-09-01",
+    toDate: "2026-09-22",
+    totals: { listening: 60, speaking: 0, reading: 120, writing: 120, anki: 1000 },
+    points: [
+      { label: "2026-09-20", listening: 60, speaking: 0, reading: 0, writing: 0 },
+      { label: "2026-09-21", listening: 0, speaking: 0, reading: 120, writing: 0 },
+      { label: "2026-09-22", listening: 0, speaking: 0, reading: 0, writing: 120 },
+    ],
+  };
+  const calls = [];
+  const runtime = fixtureRuntime({
+    async runPlanner(args) {
+      calls.push(args);
+      if (args[0] === "query-english-skills") return monthlyStatistics;
+      if (args[0] === "get-plugin-state") return { found: true, value: { dailyMinutes: 150 } };
+      throw new Error("unexpected command");
+    },
+  });
+  const context = { planRuntime: runtime, now: new Date("2026-09-22T12:00:00+08:00") };
+  for (const [phrase, expected] of [
+    ["如果今天学习8h", /平均每天：1小时40分钟 → 3小时40分钟[\s\S]*总学习时长：5小时 → 11小时[\s\S]*统计天数：3天 → 3天/u],
+    ["如果明天学习8h", /平均每天：1小时40分钟 → 3小时15分钟[\s\S]*统计天数：3天 → 4天（\+1天）/u],
+    ["如果昨天学习3h", /平均每天：1小时40分钟 → 2小时[\s\S]*总学习时长：5小时 → 6小时/u],
+    ["如果未来7天每天学习8h", /平均每天：1小时40分钟 → 6小时6分钟[\s\S]*统计天数：3天 → 10天（\+7天）/u],
+    ["如果接下来30天平均每天学习6.5h", /统计天数：3天 → 33天（\+30天）/u],
+    ["如果今天不学习呢？", /平均每天：1小时40分钟 → 1小时[\s\S]*平均每天减少40分钟/u],
+  ]) {
+    assert.equal(match(phrase, context), true, phrase);
+    const result = await handle(phrase, context);
+    assert.equal(result.command, "学习时长假设模拟", phrase);
+    assert.match(result.reply, expected, phrase);
+    assert.match(result.reply, /本月真实记录/u, phrase);
+    assert.deepEqual(result.mediaPaths, [], phrase);
+  }
+  assert.equal(monthlyStatistics.totals.writing, 120);
+  assert.equal(calls.filter((args) => args[0] === "query-english-skills").length, 6);
+});
+
+test("matches common date prefixes with every requested statistic suffix", () => {
+  const prefixes = ["今天", "昨天", "7月", "2025年7月", "2025年", "2026年7月15日", "本周", "上个月"];
+  const suffixes = ["英语学习统计图", "英语学习", "英语统计图", "英语学习统计"];
+  for (const prefix of prefixes) {
+    for (const suffix of suffixes) assert.equal(match(`${prefix}${suffix}`), true, `${prefix}${suffix}`);
+  }
+});
+
+test("specific month, year, and relative day select the expected ranges", async () => {
+  const calls = [];
+  const runtime = fixtureRuntime({
+    async runPlanner(args) {
+      if (args[0] === "get-plugin-state") return { found: false, value: null };
+      if (args[0] !== "query-english-skills") throw new Error("unexpected command");
+      calls.push(args);
+      const from = args[args.indexOf("--from") + 1];
+      const to = args[args.indexOf("--to") + 1];
+      return { ...statistics, fromDate: from, toDate: to };
+    },
+  });
+  const context = { planRuntime: runtime, now: new Date("2026-09-22T12:00:00+08:00") };
+  for (const [phrase, from, to, granularity] of [
+    ["7月英语学习统计图", "2026-07-01", "2026-07-31", "day"],
+    ["2025年英语学习", "2025-01-01", "2025-12-31", "month"],
+    ["今天英语统计图", "2026-09-22", "2026-09-22", "day"],
+    ["昨天英语学习统计", "2026-09-21", "2026-09-21", "day"],
+  ]) {
+    const result = await handle(phrase, context);
+    assert.equal(result.command, "英语学习统计图", phrase);
+    const args = calls.at(-1);
+    assert.equal(args[args.indexOf("--from") + 1], from, phrase);
+    assert.equal(args[args.indexOf("--to") + 1], to, phrase);
+    assert.equal(args[args.indexOf("--granularity") + 1], granularity, phrase);
+  }
+});
+
+test("manual statistics reply contains only inactivity reminders", async () => {
   for (const phrase of ["英语统计", "英语统计图"]) {
     const result = await handle(phrase, { planRuntime: fixtureRuntime(), now: new Date("2026-09-16T12:00:00+08:00") });
-    assert.match(result.reply, /本周英语五项学习统计/u, phrase);
+    assert.equal(result.reply, "间隔提醒：口语暂无训练记录。", phrase);
+    assert.doesNotMatch(result.reply, /五项|读：|%/u, phrase);
   }
 });
 
 test("statistics use the shared runtime and an outbound chart copy", async () => {
   const result = await handle("本周英语统计图", { planRuntime: fixtureRuntime(), now: new Date("2026-09-16T12:00:00+08:00") });
   assert.equal(result.command, "英语学习统计图");
-  assert.match(result.reply, /本周英语五项学习统计/u);
-  assert.match(result.reply, /读：2小时/u);
+  assert.equal(result.reply, "间隔提醒：口语暂无训练记录。");
   assert.deepEqual(result.mediaPaths, ["outbound.png"]);
 });
 
-test("chart failure preserves exact text statistics and redacts local paths", async () => {
+test("chart failure preserves reminders and redacts local paths", async () => {
   const runtime = fixtureRuntime({
     async generateEnglishSkillsChart() { throw new Error("render failed at C:\\Users\\Private\\secret.png token=abc123"); },
   });
   const result = await handle("本周英语统计图", { planRuntime: runtime, now: new Date("2026-09-16T12:00:00+08:00") });
-  assert.match(result.reply, /英语五项学习统计/u);
-  assert.match(result.reply, /图表生成失败，文字统计仍可用/u);
+  assert.match(result.reply, /^间隔提醒：口语暂无训练记录。/u);
+  assert.match(result.reply, /图表生成失败/u);
+  assert.doesNotMatch(result.reply, /五项|读：|%/u);
   assert.doesNotMatch(result.reply, /Users|abc123/u);
   assert.deepEqual(result.mediaPaths, []);
 });

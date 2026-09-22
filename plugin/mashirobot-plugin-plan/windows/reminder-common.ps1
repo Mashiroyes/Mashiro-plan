@@ -3,6 +3,10 @@ Set-StrictMode -Version Latest
 $script:PlannerPython = (Get-Command python.exe -ErrorAction Stop).Source
 $script:PlannerCli = Join-Path (Split-Path -Parent $PSScriptRoot) 'planner\planner.py'
 $script:PluginId = 'mashirobot-plugin-plan'
+$script:PlanRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+$script:ControlReminderCli = Join-Path $script:PlanRoot 'core\control\reminder-cli.mjs'
+$script:ControlJobCli = Join-Path $script:PlanRoot 'core\control\job-cli.mjs'
+$script:ControlSqlite = if ($env:OPENCLAW_PLANNER_DB_PATH) { [IO.Path]::GetFullPath($env:OPENCLAW_PLANNER_DB_PATH) } else { Join-Path $script:PlanRoot 'sqlite\openclaw-planner.sqlite' }
 function Get-MashiroDeliveryConfig {
     $module = Join-Path $env:LOCALAPPDATA 'MashiroBot\config\MashiroBot.MachineConfig.ps1'
     if (-not (Test-Path -LiteralPath $module -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $module" }
@@ -113,6 +117,46 @@ function Send-OpenClawWeixinMessage {
         }
     }
     throw $lastError
+}
+
+function Send-ManagedReminder {
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [Parameter(Mandatory = $true)][string]$Kind,
+        [Parameter(Mandatory = $true)][ValidateRange(1,6)][int]$Priority,
+        [string]$DedupeKey,
+        [string]$SourceRef,
+        [switch]$RequiresAck,
+        [switch]$Repeat,
+        [switch]$DryRun
+    )
+    if ($DryRun) { return Send-OpenClawWeixinMessage -Message $Message -DryRun }
+    $payload = [ordered]@{sourcePlugin=$script:PluginId;kind=$Kind;priority=$Priority;content=$Message;requiresAck=[bool]$RequiresAck;repeat=[bool]$Repeat;dedupeKey=$DedupeKey;sourceRef=$SourceRef;dueAt=[DateTimeOffset]::UtcNow.ToString('o')}
+    $payload64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json -Compress -Depth 8)))
+    $raw = & node $script:ControlReminderCli dispatch $script:ControlSqlite $payload64 2>&1
+    if ($LASTEXITCODE -ne 0) { throw ($raw -join [Environment]::NewLine) }
+    $decision = ($raw -join '') | ConvertFrom-Json
+    if (-not [bool]$decision.shouldSend) { return 'SUPPRESSED' }
+    try {
+        $sent = Send-OpenClawWeixinMessage -Message ([string]$decision.message)
+        $finish = @{reminderIds=@($decision.reminderIds);ok=$true} | ConvertTo-Json -Compress -Depth 5
+        $finish64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($finish))
+        & node $script:ControlReminderCli finish $script:ControlSqlite $finish64 | Out-Null
+        return $sent
+    } catch {
+        $finish = @{reminderIds=@($decision.reminderIds);ok=$false;error=$_.Exception.Message} | ConvertTo-Json -Compress -Depth 5
+        $finish64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($finish))
+        & node $script:ControlReminderCli finish $script:ControlSqlite $finish64 | Out-Null
+        throw
+    }
+}
+
+function Invoke-ControlJob {
+    param([Parameter(Mandatory=$true)][string]$Action,[Parameter(Mandatory=$true)][System.Collections.IDictionary]$Payload)
+    $payload64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($Payload|ConvertTo-Json -Compress -Depth 10)))
+    $raw=& node $script:ControlJobCli $Action $script:ControlSqlite $payload64 2>&1
+    if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)}
+    return (($raw-join'')|ConvertFrom-Json)
 }
 
 function Remove-OpenClawPlanTask {

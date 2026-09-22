@@ -48,14 +48,21 @@ function validateManifest(manifest, directoryName, pluginDirectory) {
       throw new PluginValidationError("INVALID_MANIFEST", `${field} must be a non-empty string`);
     }
   }
-  if (!Number.isInteger(manifest.menuIndex) || manifest.menuIndex <= 0) {
-    throw new PluginValidationError("INVALID_MANIFEST", "menuIndex must be a positive integer");
-  }
   if (typeof manifest.priority !== "number" || !Number.isFinite(manifest.priority)) {
     throw new PluginValidationError("INVALID_MANIFEST", "priority must be a finite number");
   }
   if (typeof manifest.enabled !== "boolean") {
     throw new PluginValidationError("INVALID_MANIFEST", "enabled must be a boolean");
+  }
+  if (manifest.enabled && (!Number.isInteger(manifest.menuIndex) || manifest.menuIndex <= 0)) {
+    throw new PluginValidationError("INVALID_MANIFEST", "enabled plugins require a positive integer menuIndex");
+  }
+  if (
+    !manifest.enabled
+    && manifest.menuIndex !== undefined
+    && (!Number.isInteger(manifest.menuIndex) || manifest.menuIndex <= 0)
+  ) {
+    throw new PluginValidationError("INVALID_MANIFEST", "menuIndex must be a positive integer when provided");
   }
   if (!isNonEmptyString(manifest.entry) || path.isAbsolute(manifest.entry)) {
     throw new PluginValidationError("INVALID_MANIFEST", "entry must be a non-empty relative path");
