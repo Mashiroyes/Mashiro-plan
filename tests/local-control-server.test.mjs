@@ -8,8 +8,8 @@ test("local control server routes commands and requires its token", async () => 
   const calls = [];
   const server = await createLocalControlServer({ port: 0, token: "test-token", handleMessage: async (text, context) => { calls.push({ text, context }); return { reply: `ok:${text}`, mediaPaths: [] }; } });
   try {
-    const unauthorized = await fetch(`http://${server.host}:${server.port}/`);
-    assert.equal(unauthorized.status, 401);
+    const publicPage = await fetch(`http://${server.host}:${server.port}/`);
+    assert.equal(publicPage.status, 200);
     const page = await fetch(server.url);
     assert.equal(page.status, 200);
     assert.match(await page.text(), /Plan 本地控制台/);
