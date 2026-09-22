@@ -88,7 +88,9 @@ export async function createMashiroBotRuntime(options = {}) {
 
   let lastInspection = null;
   try {
-    lastInspection = await reconcile({ sqlitePath, apply: options.applyReconciliation !== false, runner: processRunner });
+    lastInspection = options.skipWindowsTaskReconciliation
+      ? { ok: true, skipped: true, missing: [], drifted: [], orphaned: [], failed: [] }
+      : await reconcile({ sqlitePath, apply: options.applyReconciliation !== false, runner: processRunner });
     if (!lastInspection.ok) degraded = true;
     log({ level: lastInspection.ok ? "info" : "error", event: "job_reconcile", message: JSON.stringify({ missing: lastInspection.missing?.length ?? 0, drifted: lastInspection.drifted?.length ?? 0, orphaned: lastInspection.orphaned?.length ?? 0, failed: lastInspection.failed?.length ?? 0 }) });
   } catch (error) {

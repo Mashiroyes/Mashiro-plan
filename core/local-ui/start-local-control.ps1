@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param([switch]$Foreground)
+$env:MASHIROBOT_LOCAL_UI_ONLY = '1'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $script = Join-Path $PSScriptRoot 'start.mjs'

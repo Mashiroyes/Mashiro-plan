@@ -16,7 +16,9 @@ function shortError(error) {
 let runtimePromise = null;
 
 function getRuntime() {
-  runtimePromise ??= createMashiroBotRuntime().then(async (created) => {
+  runtimePromise ??= createMashiroBotRuntime({
+    skipWindowsTaskReconciliation: process.env.MASHIROBOT_LOCAL_UI_ONLY === "1",
+  }).then(async (created) => {
     runtime = created;
     pluginRegistry = created.registry;
     if (process.env.MASHIROBOT_LOCAL_UI !== "0") {
