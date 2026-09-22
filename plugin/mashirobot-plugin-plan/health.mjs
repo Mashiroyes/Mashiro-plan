@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runLocalProcess } from "../../core/execution/local-process.mjs";
 
 const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
 const planRoot = path.resolve(pluginRoot, "..", "..");
@@ -58,7 +58,7 @@ export async function collectPluginHealth(registry) {
   return Object.fromEntries(entries);
 }
 
-export function runPlanHealthChecks({ exists = existsSync, now = Date.now, runPython = spawnSync } = {}) {
+export async function runPlanHealthChecks({ exists = existsSync, now = Date.now, runPython = runLocalProcess } = {}) {
   const python = "python";
   const paths = {
     manifest: path.join(pluginRoot, "plugin.json"),
@@ -73,14 +73,23 @@ export function runPlanHealthChecks({ exists = existsSync, now = Date.now, runPy
     evidence: { path: target },
     now,
   })]));
-  const pythonResult = runPython(python, ["-c", "from PIL import Image; print(Image.__version__)"], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
+  let pythonResult;
+  try {
+    pythonResult = await runPython({
+      executable: python,
+      args: ["-c", "from PIL import Image; print(Image.__version__)"],
+      timeoutMs: 8_000,
+      output: "text",
+      maxStdoutBytes: 64 * 1024,
+      maxStderrBytes: 64 * 1024,
+    });
+  } catch (error) {
+    pythonResult = { error, stdout: error?.stdout ?? "" };
+  }
   checks.python = healthEntry({
-    ok: !pythonResult.error && pythonResult.status === 0,
+    ok: !pythonResult.error,
     level: "verified",
-    evidence: { command: python, output: String(pythonResult.stdout ?? "").trim() },
+    evidence: { command: python, output: String(pythonResult.stdout ?? pythonResult.value ?? "").trim() },
     now,
   });
   return { ok: Object.values(checks).every((entry) => entry.ok), checks, checkedAt: checkedAtValue(now) };

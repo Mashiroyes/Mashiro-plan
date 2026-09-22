@@ -7,7 +7,7 @@ import { createUndoManager } from "../core/control/undo-manager.mjs";
 import { classifyRisk, RISK_LEVELS } from "../core/control/risk-policy.mjs";
 import { formatDiagnostics } from "../core/control/system-diagnostics.mjs";
 import { collectCurrentTasks, formatCurrentTasks } from "../core/control/current-tasks.mjs";
-import { openControlDatabase } from "../core/control/database.mjs";
+import { createSystemCommandRouter } from "../core/control/system-command-router.mjs";
 
 function fixture(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashiro-safety-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
 
@@ -26,9 +26,25 @@ test("diagnostic formatter distinguishes failed and unknown", () => {
   assert.match(text, /正常｜A/); assert.match(text, /未核验｜B/); assert.match(text, /异常｜C.*修复/);
 });
 
-test("current tasks aggregates available providers and marks unavailable ones", (t) => {
-  const root = fixture(t); const sqlitePath = path.join(root, "db.sqlite"); const db = openControlDatabase(sqlitePath);
-  db.exec("CREATE TABLE plan_items(title TEXT,start_time TEXT,end_time TEXT,item_status TEXT,plan_date TEXT); INSERT INTO plan_items VALUES('听力','10:00','11:00','active','2026-09-22');"); db.close();
-  const sections = collectCurrentTasks({ sqlitePath, now: new Date("2026-09-22T04:00:00Z"), reminderManager: { listCurrent: () => [{ shortId: "R001", content: "会议" }] } });
+test("current tasks combines shared reminders with plugin-owned sections", async () => {
+  const sections = await collectCurrentTasks({ reminderManager: { listCurrent: () => [{ shortId: "R001", content: "会议" }] }, pluginSections: [{ title: "今天计划", status: "ok", items: ["10:00-11:00 听力"] }, { title: "游戏计时", status: "unknown", items: [] }] });
   const text = formatCurrentTasks(sections); assert.match(text, /今天计划：10:00-11:00 听力/); assert.match(text, /活动提醒：R001 会议/); assert.match(text, /游戏计时：未核验/);
+});
+
+test("acknowledgement reports deferred Windows task cleanup", async () => {
+  const route = createSystemCommandRouter({
+    reminderManager: {
+      acknowledge: () => ({
+        status: "acknowledged",
+        reminder: { shortId: "R123", sourcePlugin: "mashirobot-plugin-plan" },
+      }),
+    },
+    onAcknowledge: async () => ({ cleanupPending: true }),
+  });
+
+  const result = await route("收到");
+
+  assert.equal(result.handled, true);
+  assert.match(result.reply, /已确认 R123/);
+  assert.match(result.reply, /任务尚未清理/);
 });

@@ -88,3 +88,6 @@ node --test ..\..\tests\plugin-router.test.mjs ..\..\tests\help-service.test.mjs
 ```
 
 正式验收还必须从微信验证财报与招股书推送、两种补学、暂停/继续、回答和聊天模式点评；文件存在或任务显示 Ready 不能单独证明完成。
+# 进程执行边界
+
+微信消息触发点评任务时使用 Core 提供的异步 ProcessRunner 调用 `schtasks.exe`，并等待明确结果。调用超时或失败时答案仍安全保存在 SQLite，回复中明确提示点评任务未启动；不使用同步子进程阻塞 Gateway。

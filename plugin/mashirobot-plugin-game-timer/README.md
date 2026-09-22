@@ -90,3 +90,6 @@ pwsh -NoProfile -File plan/plugin/mashirobot-plugin-game-timer/tests/test-worker
 node --test plan/plugin/mashirobot-plugin-game-timer/block/tests/*.test.mjs
 pwsh -NoProfile -File plan/plugin/mashirobot-plugin-game-timer/block/tests/test-worker.ps1
 ```
+# 生命周期边界
+
+游戏计时插件通过可选 `registerLifecycle()` 注册游戏计时撤销处理器。取消时仍先更新 SQLite 状态并增加 version，再删除对应 Windows Task；旧版本 Worker 不能产生副作用。Core 不直接访问 `game_timer_tasks`。

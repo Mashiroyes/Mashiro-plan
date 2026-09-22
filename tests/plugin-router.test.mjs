@@ -60,6 +60,20 @@ test("routes shared system commands before plugins", async () => {
   assert.equal(pluginMatched, false);
 });
 
+test("routes a system command before global and scoped help", async () => {
+  const localPlugin = plugin({ id: "mashirobot-plugin-plan", menuIndex: 1 });
+  const route = createPluginRouter({
+    registry: registryFor([localPlugin]),
+    planRoot: path.resolve(import.meta.dirname, ".."),
+    systemRouter: async (text) => ["帮助", "提醒帮助"].includes(text)
+      ? { handled: true, command: "系统优先", reply: text, mediaPaths: [] }
+      : null,
+  });
+
+  assert.equal((await route("帮助", { accountId: "a", conversationId: "c" })).command, "系统优先");
+  assert.equal((await route("提醒帮助", { accountId: "a", conversationId: "c" })).command, "系统优先");
+});
+
 test("routes scoped help aliases without opening the numbered menu", async () => {
   const plugins = [
     plugin({ id: "mashirobot-plugin-plan", menuIndex: 1 }),
@@ -322,4 +336,51 @@ test("normalizes the bridge context and exposes plugin help rendering", () => {
   assert.equal(context.sqlitePath, path.join(fixture.context.planRoot, "sqlite", "openclaw-planner.sqlite"));
   assert.equal(context.tempRoot, path.join(os.tmpdir(), "MashiroBot"));
   assert.equal(context.renderPluginHelp("mashirobot-plugin-plan", { detailed: true }).command, "插件详细帮助");
+});
+
+test("core sqlite configuration cannot be overridden by a message context", () => {
+  const fixture = createFixture();
+  const canonicalRoot = path.join(os.tmpdir(), "mashirobot-canonical-root");
+  const canonical = path.join(os.tmpdir(), "mashirobot-canonical.sqlite");
+  const context = createMashiroBotContext({
+    ...fixture.context,
+    sqlitePath: path.join(os.tmpdir(), "untrusted-message.sqlite"),
+  }, {
+    registry: fixture.registry,
+    planRoot: canonicalRoot,
+    sqlitePath: canonical,
+  });
+
+  assert.equal(context.planRoot, canonicalRoot);
+  assert.equal(context.sqlitePath, canonical);
+});
+
+test("treats a Promise-returning match as a local contract failure", async () => {
+  let handled = false;
+  const invalid = plugin({
+    id: "async-match",
+    menuIndex: 1,
+    match: async () => true,
+    handle: () => { handled = true; return { handled: true, command: "bad", reply: "bad" }; },
+  });
+  const route = createPluginRouter({ registry: registryFor([invalid]), planRoot: path.resolve(import.meta.dirname, "..") });
+  const result = await route("anything", createFixture().context);
+  assert.equal(result.handled, true);
+  assert.equal(result.command, "插件错误");
+  assert.match(result.reply, /match\(\) must be synchronous/);
+  assert.equal(handled, false);
+});
+
+test("keeps a matched handler timeout local", async () => {
+  const hanging = plugin({
+    id: "hanging",
+    menuIndex: 1,
+    match: () => true,
+    handle: () => new Promise(() => {}),
+  });
+  const route = createPluginRouter({ registry: registryFor([hanging]), planRoot: path.resolve(import.meta.dirname, ".."), pluginHandleTimeoutMs: 10 });
+  const result = await route("anything", createFixture().context);
+  assert.equal(result.handled, true);
+  assert.equal(result.command, "插件错误");
+  assert.match(result.reply, /timed out/);
 });

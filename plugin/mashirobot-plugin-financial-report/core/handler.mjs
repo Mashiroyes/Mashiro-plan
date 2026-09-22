@@ -45,7 +45,7 @@ function statusReply(courseType, state, progress, now) {
   ].join("\n");
 }
 
-export function handleLearningCommand(command, context, dependencies) {
+export async function handleLearningCommand(command, context, dependencies) {
   const { store, curriculum, now = context.now ?? new Date(), wakeFeedbackTask = () => {} } = dependencies;
   const ids = identity(context);
   if (command.kind === "invalid") return result(command.error, command.command);
@@ -97,7 +97,7 @@ export function handleLearningCommand(command, context, dependencies) {
     }
     store.saveAnswer({ ...ids, courseType: command.courseType, lessonNumber, answerText: command.answer, now });
     let warning = "";
-    try { wakeFeedbackTask(); } catch (error) { warning = `\n答案已安全保存，但点评任务暂时未启动：${error.message}`; }
+    try { await wakeFeedbackTask(); } catch (error) { warning = `\n答案已安全保存，但点评任务暂时未启动：${error.message}`; }
     const wording = command.courseType === "financial_report"
       ? `已收到第 ${lessonNumber} 天财报答案，正在使用聊天模式生成点评。`
       : `已收到第 ${lessonNumber} 课招股书答案，正在使用聊天模式生成点评。`;

@@ -66,14 +66,15 @@ test("plugin health promises are awaited", async () => {
   assert.deepEqual(health, { "async-plugin": { ok: true } });
 });
 
-test("plan file checks expose the common health contract", () => {
-  const result = runPlanHealthChecks({
+test("plan file checks expose the common health contract", async () => {
+  const result = await runPlanHealthChecks({
     exists: () => true,
     now: () => new Date(now).getTime(),
-    runPython: (command, args) => {
-      assert.equal(command, "python");
-      assert.deepEqual(args, ["-c", "from PIL import Image; print(Image.__version__)"]);
-      return { status: 0, stdout: "12.1.1\n" };
+    runPython: (options) => {
+      assert.equal(options.executable, "python");
+      assert.deepEqual(options.args, ["-c", "from PIL import Image; print(Image.__version__)"]);
+      assert.equal(options.timeoutMs, 8_000);
+      return { stdout: "12.1.1\n", value: "12.1.1\n" };
     },
   });
   assert.equal(result.ok, true);

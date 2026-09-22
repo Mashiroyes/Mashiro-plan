@@ -644,7 +644,7 @@ export function createContentCache({
     try {
       const winner = await readValidEntry(entryRoot, hash);
       if (winner) return winner.paths;
-      await rm(entryRoot, { recursive: true, force: true });
+      await rm(entryRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 });
       const stagingRoot = path.join(namespaceRoot, `.staging-${hash}-${randomUUID()}`);
       await mkdir(stagingRoot, { recursive: false });
       try {

@@ -255,6 +255,18 @@ test("accepts asynchronous plugin contract functions without weakening export va
   assert.deepEqual(await registry.plugins[0].module.handle(), { handled: true });
 });
 
+for (const command of ["撤销上一操作", "暂停提醒30分钟", "收到", "提醒帮助"]) {
+  test(`rejects core-reserved exact command ${command}`, async (t) => {
+    const fixtureRoot = await createFixture(t);
+    await writePlugin(fixtureRoot, { manifest: { exactCommands: [command] } });
+
+    const registry = await loadPlugins({ pluginRoot: fixtureRoot, logger: () => {} });
+
+    assert.equal(registry.plugins.length, 0);
+    assert.equal(registry.failures.some((failure) => failure.code === "RESERVED_EXACT_COMMAND"), true);
+  });
+}
+
 test("still rejects a plugin missing a required callable export", async (t) => {
   const fixtureRoot = await createFixture(t);
   await writePlugin(fixtureRoot, {

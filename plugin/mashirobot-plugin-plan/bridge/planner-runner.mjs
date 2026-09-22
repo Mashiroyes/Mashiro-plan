@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { createContentCache } from "../../../core/cache/content-cache.mjs";
@@ -51,28 +50,6 @@ async function fileHash(file) {
   } catch {
     return "missing";
   }
-}
-
-function defaultRemoveScheduledTask(taskName) {
-  const name = String(taskName ?? "");
-  if (!/^(?:OpenClaw-General-|OpenClaw-Wakeup-)/u.test(name)) return Promise.resolve(false);
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn("schtasks.exe", ["/Delete", "/TN", name, "/F"], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.once("error", () => resolve(false));
-      child.once("spawn", () => {
-        child.unref();
-        resolve(true);
-      });
-    } catch {
-      resolve(false);
-    }
-  });
 }
 
 export function createPlanRuntime(context = {}) {
@@ -123,6 +100,26 @@ export function createPlanRuntime(context = {}) {
     return result.value;
   };
 
+  const removeScheduledTask = async (taskName) => {
+    const name = String(taskName ?? "");
+    if (!/^(?:OpenClaw-General-|OpenClaw-Wakeup-)/u.test(name)) return false;
+    try {
+      await runner({
+        executable: "schtasks.exe",
+        args: ["/Delete", "/TN", name, "/F"],
+        timeoutMs: 15_000,
+        output: "text",
+        maxStdoutBytes: 64 * 1024,
+        maxStderrBytes: 64 * 1024,
+      });
+      return true;
+    } catch (error) {
+      const detail = `${error?.stdout ?? ""}\n${error?.stderr ?? ""}\n${error?.message ?? ""}`;
+      if (/cannot find|not found|找不到指定的文件|系统找不到/iu.test(detail)) return true;
+      throw error;
+    }
+  };
+
   async function generateChart(command, payload, rendererPath) {
     if (process.env.OPENCLAW_FORCE_CHART_FAILURE === "1") {
       throw new Error("forced chart failure for regression testing");
@@ -156,7 +153,7 @@ export function createPlanRuntime(context = {}) {
     runRoutineAction(action, values = {}, options = {}) {
       return runPowerShell(routineReminderScript, action, { ...values, OperationId: values.OperationId ?? randomUUID() }, 120_000, options);
     },
-    removeScheduledTask: context.removeScheduledTask ?? defaultRemoveScheduledTask,
+    removeScheduledTask: context.removeScheduledTask ?? removeScheduledTask,
     generateRecordChart(payload) {
       return generateChart("chart", payload, recordChartRenderer);
     },

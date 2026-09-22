@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getLesson, loadCurriculum } from "../core/curriculum.mjs";
+import { runLocalProcess } from "../../../core/execution/local-process.mjs";
 
 const PROHIBITED_OUTPUT = /(?:建议|推荐).{0,8}(?:买入|卖出|持有|加仓|减仓)|(?:买入|卖出|加仓|减仓).{0,8}(?:建议|推荐)/u;
 
@@ -51,18 +51,21 @@ export function validateFeedbackOutput(text) {
   return value;
 }
 
-export function runChatFeedback({ openclawPath, sessionKey, promptFile, timeoutSeconds = 120, spawnSyncImpl = spawnSync }) {
+export async function runChatFeedback({ openclawPath, sessionKey, promptFile, timeoutSeconds = 120, runProcessImpl = runLocalProcess }) {
   const args = ["agent", "--session-key", sessionKey, "--message-file", promptFile, "--json", "--thinking", "low"];
   const forbidden = /codex|paseo|goal|workspace|worktree|--deliver|work[-_ ]?mode/iu;
   if (forbidden.test([openclawPath, ...args].join(" "))) throw new Error("聊天调用意外包含工作模式参数");
-  const completed = spawnSyncImpl(openclawPath, args, {
-    encoding: "utf8",
-    timeout: timeoutSeconds * 1000,
-    windowsHide: true,
+  const completed = await runProcessImpl({
+    command: openclawPath,
+    args,
+    timeoutMs: timeoutSeconds * 1000,
+    timeoutProfile: "external",
+    operation: "financial-report-chat-feedback",
     shell: process.platform === "win32",
   });
-  if (completed.error) throw completed.error;
-  if (completed.status !== 0) throw new Error(`OpenClaw 聊天调用失败: ${String(completed.stderr ?? "").trim()}`);
+  if (completed.ok === false || (completed.exitCode ?? completed.status ?? 0) !== 0) {
+    throw new Error(`OpenClaw 聊天调用失败: ${String(completed.stderr ?? "").trim()}`);
+  }
   let parsed;
   try { parsed = JSON.parse(completed.stdout); } catch { throw new Error("OpenClaw 返回的不是有效 JSON"); }
   if (parsed.error || parsed.ok === false) throw new Error(`OpenClaw 返回错误: ${parsed.error?.message ?? parsed.error ?? "unknown"}`);
@@ -71,14 +74,14 @@ export function runChatFeedback({ openclawPath, sessionKey, promptFile, timeoutS
   return { ok: true, text: validateFeedbackOutput(text), command: openclawPath, args };
 }
 
-export function generateChatFeedback({ lesson, answer, openclawPath, sessionKey, timeoutSeconds, spawnSyncImpl }) {
-  const directory = mkdtempSync(join(tmpdir(), "mashiro-chat-feedback-"));
+export async function generateChatFeedback({ lesson, answer, openclawPath, sessionKey, timeoutSeconds, runProcessImpl }) {
+  const directory = await mkdtemp(join(tmpdir(), "mashiro-chat-feedback-"));
   const promptFile = join(directory, "prompt.txt");
   try {
-    writeFileSync(promptFile, buildFeedbackPrompt({ lesson, answer }), { encoding: "utf8", flag: "wx" });
-    return runChatFeedback({ openclawPath, sessionKey, promptFile, timeoutSeconds, spawnSyncImpl });
+    await writeFile(promptFile, buildFeedbackPrompt({ lesson, answer }), { encoding: "utf8", flag: "wx" });
+    return await runChatFeedback({ openclawPath, sessionKey, promptFile, timeoutSeconds, runProcessImpl });
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 }
 
@@ -94,7 +97,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     const curriculum = loadCurriculum(resolve(args.pluginRoot));
     const lesson = getLesson(curriculum, args.courseType, Number(args.lessonNumber));
     const answer = Buffer.from(args.answerBase64, "base64").toString("utf8");
-    const response = generateChatFeedback({ lesson, answer, openclawPath: args.openclawPath,
+    const response = await generateChatFeedback({ lesson, answer, openclawPath: args.openclawPath,
       sessionKey: args.sessionKey, timeoutSeconds: Number(args.timeoutSeconds ?? 120) });
     process.stdout.write(`${JSON.stringify({ ok: true, outputBase64: Buffer.from(response.text, "utf8").toString("base64") })}\n`);
   } catch (error) {

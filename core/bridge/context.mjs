@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { runLocalProcess as defaultRunLocalProcess } from "../execution/local-process.mjs";
+import { createClock } from "../time/clock.mjs";
 
 function resolveNow(value) {
   const candidate = typeof value === "function" ? value() : value;
@@ -10,29 +11,21 @@ function resolveNow(value) {
   return date;
 }
 
-function shanghaiDate(date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
 /**
  * Normalize the data exposed to trusted local plugins.
  */
 export function createMashiroBotContext(rawContext = {}, services = {}) {
-  const planRootValue = rawContext.planRoot ?? services.planRoot;
+  const planRootValue = services.planRoot ?? rawContext.planRoot;
   if (!planRootValue) throw new TypeError("context.planRoot is required");
 
   const now = resolveNow(rawContext.now);
+  const clock = services.clock ?? createClock({ now: () => now });
   const planRoot = path.resolve(String(planRootValue));
-  const sqlitePath = path.resolve(
-    String(rawContext.sqlitePath ?? path.join(planRoot, "sqlite", "openclaw-planner.sqlite")),
-  );
+  const sqlitePath = path.resolve(String(
+    services.sqlitePath
+    ?? rawContext.sqlitePath
+    ?? path.join(planRoot, "sqlite", "openclaw-planner.sqlite"),
+  ));
   const tempRoot = path.resolve(
     String(rawContext.tempRoot ?? path.join(os.tmpdir(), "MashiroBot")),
   );
@@ -50,7 +43,9 @@ export function createMashiroBotContext(rawContext = {}, services = {}) {
     conversationId,
     now,
     timeZone: "Asia/Shanghai",
-    localDate: shanghaiDate(now),
+    localDate: clock.shanghaiDate(now),
+    sleepBusinessDate: clock.sleepBusinessDate(now),
+    clock,
     planRoot,
     sqlitePath,
     tempRoot,
@@ -64,8 +59,10 @@ export function createMashiroBotContext(rawContext = {}, services = {}) {
     const callerOnComplete = options.onComplete;
     return localProcessRunner({
       ...options,
+      requestId: options.requestId ?? context.requestId,
+      logger: options.logger ?? services.logger,
       onComplete: (completion) => {
-        const elapsedMs = Number(completion?.elapsedMs);
+        const elapsedMs = Number(completion?.durationMs ?? completion?.elapsedMs);
         if (Number.isFinite(elapsedMs) && elapsedMs >= 0) {
           metrics.externalElapsedMs += elapsedMs;
         }

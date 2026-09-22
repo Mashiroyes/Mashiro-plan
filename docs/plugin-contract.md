@@ -43,25 +43,27 @@ mashirobot-plugin-example/
 - `enabled` 必须为布尔值。值为 `false` 时不导入入口、不进入菜单或路由。
 - `entry` 必须是插件目录内的相对文件路径，禁止绝对路径和路径穿越。
 - `exactCommands` 必须是已去除首尾空格的非空字符串数组；插件内以及插件间不能重复。
-- `help`、`/help`、`帮助` 是全局保留指令，插件不得声明。
+- 全局帮助、公共控制、提醒确认和插件帮助别名均为核心保留指令，插件不得声明；加载器使用与公共路由相同的保留指令定义进行校验。
 
 ## 入口导出
 
-入口模块必须以同步函数形式导出以下接口：
+入口模块必须导出以下四个接口，并可选导出生命周期注册接口：
 
 ```js
 export function match(message, context) {}
-export function handle(message, context) {}
-export function healthCheck() {}
-export function getHelp() {}
+export async function handle(message, context) {}
+export async function healthCheck() {}
+export async function getHelp() {}
+export function registerLifecycle(services) {} // 可选
 ```
 
-- `match(message, context)` 只判断自然语言是否匹配，不允许产生副作用。
-- `handle(message, context)` 执行本地操作并返回标准结果。
-- `healthCheck()` 检查插件脚本、数据库和系统入口。
-- `getHelp()` 返回图片帮助所需的分组数据和文字降级内容。
+- `match(message, context)` 只判断自然语言是否匹配，必须同步返回布尔值，不允许返回 Promise 或产生副作用。异步匹配属于契约错误，并作为本地已匹配失败截断 GPT。
+- `handle(message, context)` 执行本地操作并返回标准结果或对应 Promise。
+- `healthCheck()` 检查插件脚本、数据库和系统入口，可返回结果或 Promise。
+- `getHelp()` 返回图片帮助所需的分组数据和文字降级内容，可返回结果或 Promise。
+- `registerLifecycle(services)` 可注册本插件拥有的撤销、提醒确认和关闭处理器。插件负责自己的表和脚本；核心只提供注册机制。
 
-入口模块不能使用 `async function` 导出上述接口。加载器在启动阶段一次性导入模块；每条微信消息不会重新扫描目录或动态导入插件。
+核心会等待 `handle`、`healthCheck` 和 `getHelp` 返回的 Promise，并对 `handle` 设置统一超时。涉及 Python、PowerShell、图片生成或其他外部进程的操作必须使用上下文提供的受控异步执行器，并设置有限超时；不得用同步子进程阻塞网关事件循环。加载器在启动阶段一次性导入模块；每条微信消息不会重新扫描目录或动态导入插件。
 
 ## context
 
@@ -74,9 +76,10 @@ export function getHelp() {}
 - `sqlitePath`：正式 SQLite 数据库路径。
 - `tempRoot`：MashiroBot 临时文件根目录。
 - 受控的本地进程调用和日志接口。
+- `requestId`、`clock`、`localDate` 和 `sleepBusinessDate`，其中睡眠业务日以 06:00 为边界。
 - `renderPluginHelp(pluginId, { detailed })`：由核心拥有的帮助图片渲染能力。
 
-插件不得自行保留全局菜单会话，也不应自行决定 OpenClaw 是否继续调用 GPT。
+插件不得自行保留全局菜单会话，也不应自行决定 OpenClaw 是否继续调用 GPT。`planRoot` 与 `sqlitePath` 由核心启动配置统一确定；生产消息上下文不能覆盖这些路径，避免公共控制层、插件和外部进程使用不同运行副本或数据库。
 
 ## 标准结果
 
@@ -92,6 +95,8 @@ export function getHelp() {}
 ```
 
 `handled` 必须严格为 `true`。`command` 缺省时使用插件 ID；`reply` 缺省为空字符串；`mediaPaths` 缺省为空数组。插件匹配后即使执行失败，也由核心返回本地错误并截断 GPT，不把同一条消息交给模型重试。
+
+核心内部使用 `NOT_MATCHED`、`MATCHED_SUCCESS`、`MATCHED_FAILED` 三种状态；只有 `NOT_MATCHED` 会在适配边界转换成未处理。后两者都保持 `handled: true`。
 
 ## 冲突与失败
 

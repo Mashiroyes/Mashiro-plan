@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseLearningCommand } from "./core/parser.mjs";
 import { loadCurriculum } from "./core/curriculum.mjs";
@@ -10,22 +9,24 @@ import { helpData } from "./help/help-data.mjs";
 
 const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
 
-function wakeFeedbackTask(context) {
+async function wakeFeedbackTask(context) {
   if (typeof context.wakeFinancialReportFeedbackTask === "function") {
-    return context.wakeFinancialReportFeedbackTask();
+    return await context.wakeFinancialReportFeedbackTask();
   }
   if (process.platform !== "win32") return;
-  const started = spawnSync("schtasks.exe", ["/Run", "/TN", "MashiroBot Financial Report Feedback"], {
-    encoding: "utf8", windowsHide: true,
+  await context.runLocalProcess({
+    executable: "schtasks.exe",
+    args: ["/Run", "/TN", "MashiroBot Financial Report Feedback"],
+    timeoutProfile: "schtasks",
+    operation: "financial-report-feedback-wake",
   });
-  if (started.status !== 0) throw new Error(String(started.stderr || started.stdout || "计划任务启动失败").trim());
 }
 
 export function match(message) {
   return parseLearningCommand(message) !== null;
 }
 
-export function handle(message, context = {}) {
+export async function handle(message, context = {}) {
   const command = parseLearningCommand(message);
   if (!command) throw new Error("财报插件收到未匹配消息。");
   if (command.kind === "help") {
@@ -45,7 +46,7 @@ export function handle(message, context = {}) {
     installedDate: context.financialReportInstalledDate ?? installedDate,
   });
   try {
-    return handleLearningCommand(command, context, {
+    return await handleLearningCommand(command, context, {
       store,
       curriculum: loadCurriculum(pluginRoot),
       now,

@@ -2,8 +2,9 @@ import { access, readFile, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { isReservedCoreCommand } from "../contracts/reserved-commands.mjs";
+
 const PLUGIN_DIRECTORY_PATTERN = /^mashirobot-plugin-[a-z0-9][a-z0-9-]*$/;
-const RESERVED_EXACT_COMMANDS = new Set(["help", "/help", "帮助"]);
 const REQUIRED_EXPORTS = ["match", "handle", "healthCheck", "getHelp"];
 
 class PluginValidationError extends Error {
@@ -79,7 +80,7 @@ function validateManifest(manifest, directoryName, pluginDirectory) {
         "exactCommands must contain non-empty, already-trimmed strings",
       );
     }
-    if (RESERVED_EXACT_COMMANDS.has(command)) {
+    if (isReservedCoreCommand(command)) {
       throw new PluginValidationError("RESERVED_EXACT_COMMAND", `${command} is a global reserved command`);
     }
     if (commandSet.has(command)) {

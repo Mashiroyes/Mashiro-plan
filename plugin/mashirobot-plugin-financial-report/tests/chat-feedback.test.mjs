@@ -19,44 +19,44 @@ test("prompt requests four sections, 300-500 Chinese characters and no investmen
   assert.match(prompt, /不构成投资建议/);
 });
 
-test("chat invocation uses only OpenClaw agent chat contract", () => {
+test("chat invocation uses only OpenClaw agent chat contract", async () => {
   let capture;
-  const mock = (command, args, options) => {
-    capture = { command, args, options };
-    return { status: 0, stdout: JSON.stringify({ reply: validText }), stderr: "" };
+  const mock = async (request) => {
+    capture = request;
+    return { ok: true, exitCode: 0, stdout: JSON.stringify({ reply: validText }), stderr: "" };
   };
-  const response = runChatFeedback({ openclawPath: "C:\\tools\\openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:1", promptFile: "C:\\temp\\prompt.txt", spawnSyncImpl: mock });
+  const response = await runChatFeedback({ openclawPath: "C:\\tools\\openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:1", promptFile: "C:\\temp\\prompt.txt", runProcessImpl: mock });
   assert.equal(response.ok, true);
   assert.equal(capture.command, "C:\\tools\\openclaw.cmd");
   assert.deepEqual(capture.args, ["agent", "--session-key", "agent:main:financial-report-feedback:1", "--message-file", "C:\\temp\\prompt.txt", "--json", "--thinking", "low"]);
-  assert.equal(capture.options.windowsHide, true);
-  assert.equal(capture.options.shell, process.platform === "win32");
+  assert.equal(capture.operation, "financial-report-chat-feedback");
+  assert.equal(capture.shell, process.platform === "win32");
   assert.doesNotMatch([capture.command, ...capture.args].join(" "), /codex|paseo|goal|workspace|worktree|--deliver|work[-_ ]?mode/iu);
 });
 
-test("temporary UTF-8 prompt is deleted even after chat returns", () => {
+test("temporary UTF-8 prompt is deleted even after chat returns", async () => {
   let promptPath;
-  const mock = (_command, args) => {
+  const mock = async ({ args }) => {
     promptPath = args[args.indexOf("--message-file") + 1];
     assert.equal(existsSync(promptPath), true);
-    return { status: 0, stdout: JSON.stringify({ output: validText }), stderr: "" };
+    return { ok: true, exitCode: 0, stdout: JSON.stringify({ output: validText }), stderr: "" };
   };
-  generateChatFeedback({ lesson, answer: "回答", openclawPath: "openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:2", spawnSyncImpl: mock });
+  await generateChatFeedback({ lesson, answer: "回答", openclawPath: "openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:2", runProcessImpl: mock });
   assert.equal(existsSync(promptPath), false);
 });
 
-test("extracts the real OpenClaw result.payloads text shape", () => {
-  const mock = () => ({ status: 0, stdout: JSON.stringify({
+test("extracts the real OpenClaw result.payloads text shape", async () => {
+  const mock = async () => ({ ok: true, exitCode: 0, stdout: JSON.stringify({
     status: "ok", result: { payloads: [{ text: validText }], meta: { finalAssistantVisibleText: validText } },
   }), stderr: "" });
-  const response = runChatFeedback({ openclawPath: "openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:shape", promptFile: "prompt.txt", spawnSyncImpl: mock });
+  const response = await runChatFeedback({ openclawPath: "openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:shape", promptFile: "prompt.txt", runProcessImpl: mock });
   assert.equal(response.text, validText);
 });
 
-test("rejects empty, error, oversized, incomplete and stock-operation output", () => {
+test("rejects empty, error, oversized, incomplete and stock-operation output", async () => {
   assert.throws(() => validateFeedbackOutput(""), /没有返回/);
   assert.throws(() => validateFeedbackOutput("x".repeat(1501)), /1500/);
   assert.throws(() => validateFeedbackOutput("【你答对了什么】只有一段"), /缺少段落/);
   assert.throws(() => validateFeedbackOutput(validText.replace("仅用于财报学习", "建议买入这只股票。仅用于财报学习")), /股票操作建议/);
-  assert.throws(() => runChatFeedback({ openclawPath: "openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:3", promptFile: "p", spawnSyncImpl: () => ({ status: 0, stdout: JSON.stringify({ error: "bad" }), stderr: "" }) }), /返回错误/);
+  await assert.rejects(() => runChatFeedback({ openclawPath: "openclaw.cmd", sessionKey: "agent:main:financial-report-feedback:3", promptFile: "p", runProcessImpl: async () => ({ ok: true, exitCode: 0, stdout: JSON.stringify({ error: "bad" }), stderr: "" }) }), /返回错误/);
 });

@@ -2,7 +2,13 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+export const PROCESS_TIMEOUT_PROFILES = Object.freeze({
+  python: 30_000,
+  powershell: 45_000,
+  schtasks: 15_000,
+  external: 30_000,
+});
+const DEFAULT_TIMEOUT_MS = PROCESS_TIMEOUT_PROFILES.external;
 const DEFAULT_MAX_STDOUT_BYTES = 1024 * 1024;
 const DEFAULT_MAX_STDERR_BYTES = 1024 * 1024;
 const KILL_GRACE_MS = 1_000;
@@ -13,12 +19,25 @@ export class LocalProcessError extends Error {
     super(message, details.cause ? { cause: details.cause } : undefined);
     this.name = "LocalProcessError";
     this.code = code;
+    this.ok = false;
+    this.operation = details.operation ?? null;
     this.operationId = details.operationId ?? null;
+    this.requestId = details.requestId ?? null;
+    this.durationMs = details.durationMs ?? details.elapsedMs ?? 0;
     this.elapsedMs = details.elapsedMs ?? 0;
     this.exitCode = details.exitCode ?? null;
     this.stdout = details.stdout ?? "";
     this.stderr = details.stderr ?? "";
   }
+}
+
+export function resolveProcessTimeout(profile, override) {
+  if (override !== undefined) return finiteNonnegative(override, DEFAULT_TIMEOUT_MS, "timeoutMs");
+  if (profile === undefined || profile === null || profile === "") return DEFAULT_TIMEOUT_MS;
+  if (!Object.hasOwn(PROCESS_TIMEOUT_PROFILES, profile)) {
+    throw new TypeError(`unknown process timeout profile: ${profile}`);
+  }
+  return PROCESS_TIMEOUT_PROFILES[profile];
 }
 
 function finiteNonnegative(value, fallback, name) {
@@ -52,12 +71,10 @@ function normalizeOptions(options) {
   return {
     ...options,
     args: options.args ?? [],
+    operation: String(options.operation ?? options.executable),
     operationId: options.operationId ?? randomUUID(),
-    timeoutMs: finiteNonnegative(
-      options.timeoutMs,
-      DEFAULT_TIMEOUT_MS,
-      "timeoutMs",
-    ),
+    requestId: options.requestId == null ? null : String(options.requestId),
+    timeoutMs: resolveProcessTimeout(options.timeoutProfile, options.timeoutMs),
     maxStdoutBytes: finiteNonnegative(
       options.maxStdoutBytes,
       DEFAULT_MAX_STDOUT_BYTES,
@@ -72,6 +89,18 @@ function normalizeOptions(options) {
     jsonMode,
     spawnImpl: options.spawnImpl ?? spawn,
   };
+}
+
+function emitProcessLog(logger, record) {
+  if (!logger) return;
+  try {
+    const pending = typeof logger === "function"
+      ? logger(record)
+      : (logger[record.level] ?? logger.log)?.call(logger, record);
+    Promise.resolve(pending).catch(() => {});
+  } catch {
+    // Observability must never alter the process result.
+  }
 }
 
 function waitForAuxiliaryProcess(child, timeoutMs = TASKKILL_WAIT_MS) {
@@ -143,7 +172,9 @@ function executeProcess(options, startedAt) {
     output,
     jsonMode,
     signal,
+    operation,
     operationId,
+    requestId,
     spawnImpl,
   } = options;
   const killTreeImpl = options.killTreeImpl ?? defaultKillTree;
@@ -182,9 +213,13 @@ function executeProcess(options, startedAt) {
         code: "PROCESS_SPAWN_FAILED",
         message: "The local process failed before completion.",
       };
+      const durationMs = elapsed(reason.minimumElapsedMs);
       reject(new LocalProcessError(reason.code, reason.message, {
+        operation,
         operationId,
-        elapsedMs: elapsed(reason.minimumElapsedMs),
+        requestId,
+        durationMs,
+        elapsedMs: durationMs,
         exitCode,
         stdout: stdoutText(),
         stderr: stderrText(),
@@ -337,14 +372,19 @@ function executeProcess(options, startedAt) {
         return;
       }
 
+      const durationMs = elapsed();
       settled = true;
       cleanup();
       resolve({
+        ok: true,
+        operation,
         operationId,
+        requestId,
         exitCode,
         stdout,
         stderr,
-        elapsedMs: elapsed(),
+        durationMs,
+        elapsedMs: durationMs,
         value,
       });
     });
@@ -373,16 +413,35 @@ export async function runLocalProcess(rawOptions) {
   }
 
   let completion = {
+    ok: false,
+    operation: options.operation,
     operationId: options.operationId,
+    requestId: options.requestId,
+    durationMs: 0,
     elapsedMs: 0,
     code: "PROCESS_SPAWN_FAILED",
     exitCode: null,
   };
 
+  emitProcessLog(options.logger, {
+    timestamp: new Date().toISOString(),
+    level: "info",
+    pluginId: options.pluginId ?? "mashirobot-core",
+    event: "process_start",
+    message: options.operation,
+    operation: options.operation,
+    operationId: options.operationId,
+    requestId: options.requestId,
+  });
+
   try {
     const result = await executeProcess(options, startedAt);
     completion = {
+      ok: true,
+      operation: result.operation,
       operationId: result.operationId,
+      requestId: result.requestId,
+      durationMs: result.durationMs,
       elapsedMs: result.elapsedMs,
       code: "OK",
       exitCode: result.exitCode,
@@ -390,7 +449,12 @@ export async function runLocalProcess(rawOptions) {
     return result;
   } catch (error) {
     completion = {
+      ok: false,
+      operation: options.operation,
       operationId: options.operationId,
+      requestId: options.requestId,
+      durationMs: error?.durationMs ?? error?.elapsedMs
+        ?? Math.max(0, Math.round(performance.now() - startedAt)),
       elapsedMs: error?.elapsedMs
         ?? Math.max(0, Math.round(performance.now() - startedAt)),
       code: error?.code ?? "PROCESS_SPAWN_FAILED",
@@ -398,6 +462,19 @@ export async function runLocalProcess(rawOptions) {
     };
     throw error;
   } finally {
+    emitProcessLog(options.logger, {
+      timestamp: new Date().toISOString(),
+      level: completion.ok ? "info" : "error",
+      pluginId: options.pluginId ?? "mashirobot-core",
+      event: "process_complete",
+      message: completion.code,
+      operation: completion.operation,
+      operationId: completion.operationId,
+      requestId: completion.requestId,
+      durationMs: completion.durationMs,
+      exitCode: completion.exitCode,
+      errorCode: completion.ok ? "" : completion.code,
+    });
     if (typeof options.onComplete === "function") {
       try {
         await options.onComplete(completion);

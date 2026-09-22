@@ -24,53 +24,53 @@ function fixture(t, now = new Date("2026-08-11T10:20:00Z")) {
   return { store, run, context, now };
 }
 
-test("status and manual course views do not create delivery rows", (t) => {
+test("status and manual course views do not create delivery rows", async (t) => {
   const { store, run } = fixture(t);
-  assert.match(run("财报课程").reply, /已发送：0\/30/);
-  assert.match(run("今日财报").reply, /第 2 天财报课/);
-  assert.match(run("补学第1天").reply, /第 1 天财报课/);
-  assert.match(run("今日招股书").reply, /第 1 课招股书课/);
-  assert.match(run("补学招股书第1课").reply, /第 1 课招股书课/);
+  assert.match((await run("财报课程")).reply, /已发送：0\/30/);
+  assert.match((await run("今日财报")).reply, /第 2 天财报课/);
+  assert.match((await run("补学第1天")).reply, /第 1 天财报课/);
+  assert.match((await run("今日招股书")).reply, /第 1 课招股书课/);
+  assert.match((await run("补学招股书第1课")).reply, /第 1 课招股书课/);
   assert.equal(store._database.prepare("SELECT COUNT(*) AS n FROM financial_report_deliveries").get().n, 0);
 });
 
-test("pause and resume freeze both course types", (t) => {
+test("pause and resume freeze both course types", async (t) => {
   const { store, run } = fixture(t);
-  run("暂停财报");
+  await run("暂停财报");
   assert.equal(store.getCourseState("wx", "me", "financial_report").paused, true);
   assert.equal(store.getCourseState("wx", "me", "prospectus").paused, true);
-  run("继续财报");
+  await run("继续财报");
   assert.equal(store.getCourseState("wx", "me", "financial_report").paused, false);
 });
 
-test("implicit answer requires exactly one unanswered sent lesson", (t) => {
+test("implicit answer requires exactly one unanswered sent lesson", async (t) => {
   const { store, run } = fixture(t);
-  assert.match(run("财报答案 我的回答").reply, /无法唯一判断/);
+  assert.match((await run("财报答案 我的回答")).reply, /无法唯一判断/);
   const claim = store.claimDelivery({ accountId: "wx", conversationId: "me", courseType: "financial_report", lessonNumber: 2, scheduledDate: "2026-08-11" });
   store.finishDelivery(claim.delivery.id, { success: true });
-  assert.match(run("财报答案 我的回答").reply, /第 2 天财报答案.*聊天模式/s);
+  assert.match((await run("财报答案 我的回答")).reply, /第 2 天财报答案.*聊天模式/s);
 });
 
-test("explicit and repeated answers create separate pending attempts", (t) => {
+test("explicit and repeated answers create separate pending attempts", async (t) => {
   const { store, run } = fixture(t);
-  run("财报答案 第1天 第一次");
-  run("财报答案 第1天 第二次");
-  run("招股书答案 第1课 我的答案");
+  await run("财报答案 第1天 第一次");
+  await run("财报答案 第1天 第二次");
+  await run("招股书答案 第1课 我的答案");
   assert.equal(store._database.prepare("SELECT COUNT(*) AS n FROM financial_report_answers").get().n, 3);
   assert.equal(store._database.prepare("SELECT COUNT(*) AS n FROM financial_report_feedback WHERE status='pending'").get().n, 3);
 });
 
-test("wake failure keeps the answer pending and reports a warning", (t) => {
+test("wake failure keeps the answer pending and reports a warning", async (t) => {
   const { store, run } = fixture(t);
-  const response = run("财报答案 第1天 内容", { wakeFeedbackTask: () => { throw new Error("任务不可用"); } });
+  const response = await run("财报答案 第1天 内容", { wakeFeedbackTask: () => { throw new Error("任务不可用"); } });
   assert.match(response.reply, /答案已安全保存.*任务不可用/s);
   assert.equal(store._database.prepare("SELECT status FROM financial_report_feedback").get().status, "pending");
 });
 
-test("relearn does not alter automatic delivery success", (t) => {
+test("relearn does not alter automatic delivery success", async (t) => {
   const { store, run } = fixture(t);
   const claim = store.claimDelivery({ accountId: "wx", conversationId: "me", courseType: "financial_report", lessonNumber: 2, scheduledDate: "2026-08-11" });
   store.finishDelivery(claim.delivery.id, { success: true });
-  assert.match(run("重学今日财报").reply, /第 2 天财报课/);
+  assert.match((await run("重学今日财报")).reply, /第 2 天财报课/);
   assert.equal(store._database.prepare("SELECT status FROM financial_report_deliveries").get().status, "sent");
 });

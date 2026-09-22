@@ -17,6 +17,9 @@ import { buildAuditTargets, writeAuditTargetManifest } from "./audit/core/target
 import * as blockPlugin from "./block/index.mjs";
 import { createPendingDeleteStore } from "./core/pending-delete-storage.mjs";
 import { applyGameExecutableOverrides, readMachineConfig } from "../../core/config/machine-config.mjs";
+import { registerGameTimerLifecycle } from "./lifecycle.mjs";
+
+export const registerLifecycle = registerGameTimerLifecycle;
 
 const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
 const defaultConfigPath = path.join(pluginRoot, "core", "games.json");

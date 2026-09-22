@@ -1,6 +1,9 @@
 import { helpData } from "./help/help-data.mjs";
 import { runPlanHealthChecks } from "./health.mjs";
 import { handlePlanPlugin, matchPlanPlugin } from "./routes/index.mjs";
+import { registerPlanLifecycle } from "./lifecycle.mjs";
+
+export const registerLifecycle = registerPlanLifecycle;
 
 export const match = (message, context) => matchPlanPlugin(message, context);
 
@@ -18,5 +21,5 @@ export const handle = async (message, context) => {
   };
 };
 
-export const healthCheck = () => runPlanHealthChecks();
+export const healthCheck = async () => runPlanHealthChecks();
 export const getHelp = () => helpData;

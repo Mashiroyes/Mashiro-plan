@@ -1,11 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
-import { normalizePluginResult } from "../contracts/plugin-result.mjs";
+import {
+  matchedFailure,
+  matchedSuccess,
+  normalizePluginResult,
+  notMatched,
+  ROUTE_STATES,
+} from "../contracts/plugin-result.mjs";
 import { createMashiroBotContext } from "../bridge/context.mjs";
 import { createMenuSessionStore } from "../menu/menu-session.mjs";
 
-const HELP_ALIASES = new Set(["help", "/help", "帮助"]);
+import {
+  HELP_ALIASES,
+  SCOPED_HELP_ALIASES,
+} from "../contracts/reserved-commands.mjs";
+
 const POSITIVE_INTEGER = /^[1-9]\d*$/;
 
 function shortError(error) {
@@ -65,18 +75,39 @@ export function createTextHelpService() {
   });
 }
 
-async function invokePlugin(plugin, text, context, metrics) {
+function thenable(value) {
+  return value != null && (typeof value === "object" || typeof value === "function")
+    && typeof value.then === "function";
+}
+
+function withTimeout(promise, timeoutMs, pluginId) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return Promise.resolve(promise);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`plugin handle timed out after ${timeoutMs} ms`);
+      error.code = "PLUGIN_TIMEOUT";
+      error.pluginId = pluginId;
+      reject(error);
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
+}
+
+async function invokePlugin(plugin, text, context, metrics, timeoutMs) {
   const startedAt = performance.now();
   metrics.pluginId = plugin.manifest.id;
   try {
-    return normalizePluginResult(
-      await plugin.module.handle(text, context),
+    const normalized = normalizePluginResult(
+      await withTimeout(plugin.module.handle(text, context), timeoutMs, plugin.manifest.id),
       plugin.manifest.id,
     );
+    return matchedSuccess(normalized);
   } catch (error) {
     metrics.errorCode = String(error?.code || "PLUGIN_ERROR");
     metrics.errorMessage = shortError(error);
-    return pluginError(plugin.manifest.id, error);
+    return matchedFailure(pluginError(plugin.manifest.id, error), metrics.errorCode);
   } finally {
     metrics.handleElapsedMs += Math.max(0, performance.now() - startedAt);
   }
@@ -104,7 +135,7 @@ function requestIdFrom(rawContext) {
 }
 
 /**
- * Build one synchronous GPT-before-local router around a startup-time registry.
+ * Build one asynchronous local-before-GPT router around a startup-time registry.
  */
 export function createPluginRouter({
   registry,
@@ -113,7 +144,10 @@ export function createPluginRouter({
   planRoot,
   logger,
   runLocalProcess,
+  clock,
   systemRouter,
+  sqlitePath,
+  pluginHandleTimeoutMs = 60_000,
 } = {}) {
   if (!registry?.plugins || !registry?.byMenuIndex || !registry?.byExactCommand) {
     throw new TypeError("a loaded plugin registry is required");
@@ -144,8 +178,9 @@ export function createPluginRouter({
     let routedResult = null;
     let unexpectedError = null;
     const remember = (result) => {
-      routedResult = result;
-      return result;
+      const routeState = result?.state ? result : matchedSuccess(result);
+      routedResult = routeState;
+      return routeState.state === "NOT_MATCHED" ? null : routeState.result;
     };
 
     try {
@@ -154,7 +189,6 @@ export function createPluginRouter({
         {
           ...rawContext,
           requestId,
-          planRoot: rawContext.planRoot ?? planRoot,
         },
         {
           registry,
@@ -162,18 +196,24 @@ export function createPluginRouter({
           metrics,
           requestId,
           runLocalProcess,
+          clock,
+          logger,
+          planRoot,
+          sqlitePath,
         },
       );
       const key = `${context.accountId}\0${context.conversationId}`;
 
-      const helpAliasIds = new Map([
-        ["提醒帮助", "mashirobot-plugin-plan"],
-        ["游戏帮助", "mashirobot-plugin-game-timer"],
-        ["禁止帮助", "mashirobot-plugin-game-timer"],
-        ["英语帮助", "mashirobot-plugin-language"],
-      ]);
-      if (helpAliasIds.has(text)) {
-        const plugin = registry.plugins.find((entry) => entry.manifest.id === helpAliasIds.get(text));
+      if (systemRouter) {
+        const systemResult = await systemRouter(text, context);
+        if (systemResult) {
+          metrics.pluginId = "mashirobot-core";
+          return remember(normalizePluginResult(systemResult, "mashirobot-core"));
+        }
+      }
+
+      if (SCOPED_HELP_ALIASES.has(text)) {
+        const plugin = registry.plugins.find((entry) => entry.manifest.id === SCOPED_HELP_ALIASES.get(text));
         if (plugin) return remember(await renderPluginHelp(plugin, { detailed: false, context }));
       }
 
@@ -226,38 +266,35 @@ export function createPluginRouter({
         }
       }
 
-      if (systemRouter) {
-        const systemResult = await systemRouter(text, context);
-        if (systemResult) {
-          metrics.pluginId = "mashirobot-core";
-          return remember(normalizePluginResult(systemResult, "mashirobot-core"));
-        }
-      }
-
       const exactPlugin = registry.byExactCommand.get(text);
       if (exactPlugin) {
-        return remember(await invokePlugin(exactPlugin, text, context, metrics));
+        return remember(await invokePlugin(exactPlugin, text, context, metrics, pluginHandleTimeoutMs));
       }
 
       for (const plugin of registry.plugins) {
         let matched;
         const matchStartedAt = performance.now();
         try {
-          matched = await plugin.module.match(text, context);
+          matched = plugin.module.match(text, context);
+          if (thenable(matched)) {
+            const error = new Error("match() must be synchronous and side-effect free");
+            error.code = "PLUGIN_ASYNC_MATCH";
+            throw error;
+          }
         } catch (error) {
           metrics.pluginId = plugin.manifest.id;
           metrics.errorCode = String(error?.code || "PLUGIN_MATCH_ERROR");
           metrics.errorMessage = shortError(error);
-          return remember(pluginError(plugin.manifest.id, error));
+          return remember(matchedFailure(pluginError(plugin.manifest.id, error), metrics.errorCode));
         } finally {
           metrics.matchElapsedMs += Math.max(0, performance.now() - matchStartedAt);
         }
         if (matched) {
-          return remember(await invokePlugin(plugin, text, context, metrics));
+          return remember(await invokePlugin(plugin, text, context, metrics, pluginHandleTimeoutMs));
         }
       }
 
-      return remember(null);
+      return remember(notMatched());
     } catch (error) {
       unexpectedError = error;
       metrics.errorCode = String(error?.code || "ROUTE_ERROR");
@@ -267,11 +304,11 @@ export function createPluginRouter({
       const elapsedMs = Math.max(0, performance.now() - startedAt);
       const event = metrics.errorCode
         ? "route_failed"
-        : routedResult
+        : routedResult?.state !== ROUTE_STATES.NOT_MATCHED
           ? "route_completed"
           : "route_unmatched";
       const message = metrics.errorMessage
-        || routedResult?.command
+        || routedResult?.result?.command
         || (unexpectedError ? "route failed" : "unmatched");
       emitLog(logger, {
         level: metrics.errorCode ? "error" : "info",

@@ -341,8 +341,26 @@ test("settles and calls onComplete exactly once when timeout, error, and close r
   assert.equal(completions[0].exitCode, null);
   assert.deepEqual(
     Object.keys(completions[0]).sort(),
-    ["code", "elapsedMs", "exitCode", "operationId"],
+    ["code", "durationMs", "elapsedMs", "exitCode", "ok", "operation", "operationId", "requestId"],
   );
+});
+
+test("propagates operation and request metadata without logging arguments", async () => {
+  const logs = [];
+  const result = await runLocalProcess({
+    executable: process.execPath,
+    args: ["-e", "process.stdout.write('metadata')"],
+    operation: "metadata-test",
+    requestId: "request-123",
+    timeoutProfile: "external",
+    logger: (entry) => logs.push(entry),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.operation, "metadata-test");
+  assert.equal(result.requestId, "request-123");
+  assert.equal(result.durationMs, result.elapsedMs);
+  assert.deepEqual(logs.map((entry) => entry.event), ["process_start", "process_complete"]);
+  assert.equal(JSON.stringify(logs).includes("process.stdout.write"), false);
 });
 
 test("calls onComplete once for success and ignores callback failures", async () => {

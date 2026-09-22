@@ -5,6 +5,7 @@ import test from "node:test";
 
 import { createMashiroBotContext } from "../core/bridge/context.mjs";
 import { createPluginRouter } from "../core/router/plugin-router.mjs";
+import { createPlanRuntime } from "../plugin/mashirobot-plugin-plan/bridge/planner-runner.mjs";
 
 const fixtureContext = {
   accountId: "account",
@@ -49,9 +50,9 @@ function registryFor(plugins) {
   };
 }
 
-test("awaits an asynchronous plugin and keeps failures local", async () => {
+test("awaits an asynchronous handler and keeps failures local", async () => {
   const plugin = fakePlugin({
-    match: async () => true,
+    match: () => true,
     handle: async () => {
       await Promise.resolve();
       throw new Error("async boom");
@@ -179,4 +180,23 @@ test("caller onComplete hooks never delay or reject the local-process result", a
 
     assert.equal(result.value, "done");
   }
+});
+
+test("scheduled-task cleanup uses the bounded shared process runner", async () => {
+  const calls = [];
+  const runtime = createPlanRuntime({
+    sqlitePath: path.join(os.tmpdir(), "mashirobot-cleanup.sqlite"),
+    runLocalProcess: async (options) => {
+      calls.push(options);
+      return { value: "", stdout: "", elapsedMs: 1 };
+    },
+  });
+
+  assert.equal(await runtime.removeScheduledTask("OpenClaw-General-fixture"), true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].executable, "schtasks.exe");
+  assert.deepEqual(calls[0].args, ["/Delete", "/TN", "OpenClaw-General-fixture", "/F"]);
+  assert.equal(calls[0].timeoutMs, 15_000);
+  assert.equal(await runtime.removeScheduledTask("unsafe-task"), false);
+  assert.equal(calls.length, 1);
 });
