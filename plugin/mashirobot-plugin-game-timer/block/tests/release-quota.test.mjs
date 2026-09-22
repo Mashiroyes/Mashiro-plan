@@ -4,17 +4,17 @@ import { evaluateReleaseQuota } from "../core/release-quota.mjs";
 
 const at = (local) => new Date(`${local.replace(" ", "T")}:00+08:00`);
 
-test("applies the three Shanghai period limits", () => {
+test("applies bounded morning and afternoon quotas with unlimited evening", () => {
   for (const [start, minutes, limit] of [
     ["2026-09-22 09:00", 20, 20],
     ["2026-09-22 13:00", 30, 30],
-    ["2026-09-22 19:00", 30, 30],
+    ["2026-09-22 19:00", 180, null],
   ]) {
     const from = at(start);
     const result = evaluateReleaseQuota({ intervals: [], proposedStart: from, proposedEnd: new Date(from.getTime() + minutes * 60_000) });
     assert.equal(result.allowed, true);
     assert.equal(result.periods[0].limitMinutes, limit);
-    assert.equal(result.periods[0].remainingMinutes, 0);
+    assert.equal(result.periods[0].remainingMinutes, limit === null ? null : 0);
   }
 });
 
@@ -33,8 +33,8 @@ test("merges overlap instead of charging it twice", () => {
 test("splits requests at noon, 18:00, and midnight", () => {
   for (const [start, end, expected] of [
     ["2026-09-22 11:50", "2026-09-22 12:10", [20, 30]],
-    ["2026-09-22 17:50", "2026-09-22 18:10", [30, 30]],
-    ["2026-09-22 23:50", "2026-09-23 00:10", [30, 20]],
+    ["2026-09-22 17:50", "2026-09-22 18:10", [30, null]],
+    ["2026-09-22 23:50", "2026-09-23 00:10", [null, 20]],
   ]) {
     const result = evaluateReleaseQuota({ intervals: [], proposedStart: at(start), proposedEnd: at(end) });
     assert.deepEqual(result.periods.map((period) => period.limitMinutes), expected);
@@ -52,4 +52,3 @@ test("rejects the whole proposal if one touched period is exhausted", () => {
   assert.equal(result.periods[0].remainingMinutes, -5);
   assert.equal(result.periods[1].remainingMinutes, 25);
 });
-

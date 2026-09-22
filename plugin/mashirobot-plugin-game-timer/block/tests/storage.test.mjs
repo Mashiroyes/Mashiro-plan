@@ -100,3 +100,32 @@ test("splits cross-period quota and deletion clears history", () => {
     assert.equal(fresh.quota.periods[0].usedMinutes, 0);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test("evening website releases are unlimited", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-evening-"));
+  try {
+    const store = createBlockStore(path.join(root, "planner.sqlite"));
+    const now = new Date("2026-09-22T11:00:00.000Z"); // 19:00 Shanghai
+    const result = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T14:00:00.000Z" }, now);
+    assert.equal(result.allowed, true);
+    assert.equal(result.quota.periods[0].label, "晚上");
+    assert.equal(result.quota.periods[0].limitMinutes, null);
+    assert.equal(result.quota.periods[0].remainingMinutes, null);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("cross-period releases still enforce the bounded afternoon quota", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mashirobot-block-cross-evening-"));
+  try {
+    const store = createBlockStore(path.join(root, "planner.sqlite"));
+    const usedAt = new Date("2026-09-22T09:00:00.000Z"); // 17:00 Shanghai
+    assert.equal(store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T09:25:00.000Z" }, usedAt).allowed, true);
+    store.restoreRelease("bilibili.com", new Date("2026-09-22T09:25:00.000Z"));
+    const result = store.tryRelease({ targetKey: "bilibili.com", displayName: "bilibili.com", expiresAt: "2026-09-22T10:40:00.000Z" }, new Date("2026-09-22T09:50:00.000Z"));
+    assert.equal(result.allowed, false);
+    assert.deepEqual(result.quota.periods.map(({ label, addedMinutes }) => ({ label, addedMinutes })), [
+      { label: "下午", addedMinutes: 10 },
+      { label: "晚上", addedMinutes: 40 },
+    ]);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

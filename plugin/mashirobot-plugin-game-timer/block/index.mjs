@@ -29,7 +29,7 @@ function formatAt(value) {
 
 function wholeRemaining(value) { return Math.max(0, Math.floor(Number(value) + 1e-9)); }
 function formatQuotaRemaining(periods) {
-  return periods.map((period) => `${period.label}剩余 ${wholeRemaining(period.remainingMinutes)} 分钟`).join("，");
+  return periods.map((period) => period.remainingMinutes === null ? `${period.label}不限额` : `${period.label}剩余 ${wholeRemaining(period.remainingMinutes)} 分钟`).join("，");
 }
 
 const CONFIRM_BLOCK = /^确认禁止\s+(B[0-9A-F]{3})$/iu;
@@ -125,7 +125,7 @@ export async function handle(message, context = {}) {
     if (!store.getEffectiveWebsite(targetKey, now)) return result(`当前没有 ${displayName} 的生效网站禁止规则，未执行解除。`, "临时解除网站");
     const releaseResult = store.tryRelease({ targetKey, displayName, expiresAt: getReleaseExpiry(command, now) }, now);
     if (!releaseResult.allowed) {
-      const insufficient = releaseResult.quota.periods.filter((period) => period.remainingMinutes < 0);
+      const insufficient = releaseResult.quota.periods.filter((period) => typeof period.remainingMinutes === "number" && period.remainingMinutes < 0);
       const available = insufficient.map((period) => ({ ...period, remainingMinutes: period.limitMinutes - period.usedMinutes }));
       return result(`${displayName} 本次无法解除：${formatQuotaRemaining(available)}。请将解除时长改为不超过剩余额度。`, "临时解除网站");
     }
@@ -179,7 +179,7 @@ export function healthCheck() {
 
 export function getHelp() {
   return {
-    groups: [{ title: "设置禁止规则", items: ["禁止下载QQ7天", "禁止访问bilibili.com永久", "支持天、小时和永久"] }, { title: "临时解除", items: ["解除bilibili10分钟", "解除10分钟：使用今天最近一次明确指定的网站，未指定时默认 bilibili.com", "每个网站独立限额：上午20分钟、下午30分钟、晚上30分钟", "立即恢复bilibili"] }, { title: "查询与删除", items: ["查询禁止名单", "删除禁止规则2，4，6，然后确认删除"] }],
+    groups: [{ title: "设置禁止规则", items: ["禁止下载QQ7天", "禁止访问bilibili.com永久", "支持天、小时和永久"] }, { title: "临时解除", items: ["解除bilibili10分钟", "解除10分钟：使用今天最近一次明确指定的网站，未指定时默认 bilibili.com", "每个网站独立限额：上午20分钟、下午30分钟、晚上不限额", "立即恢复bilibili"] }, { title: "查询与删除", items: ["查询禁止名单", "删除禁止规则2，4，6，然后确认删除"] }],
     detailedGroups: [{ title: "软件", items: ["支持 QQ、Bilibili 预配置规则", "软件规则同时阻止启动、安装包和官方下载域名"] }, { title: "网站", items: ["可填写 http/https URL 或域名", "永久规则同时写入 Hosts、Chrome/Edge 与 Clash", "临时解除不会删除永久规则，到期后自动恢复", "额度不足时整次请求会被拒绝，不会自动缩短"] }],
     fallbackText: "禁止下载QQ7天\n禁止访问bilibili.com永久\n解除bilibili10分钟\n解除10分钟\n立即恢复bilibili\n查询禁止名单\n删除禁止规则2，4，6\n确认删除",
   };

@@ -4,7 +4,7 @@ const MINUTE_MS = 60_000;
 const BANDS = Object.freeze([
   { startHour: 0, endHour: 12, limitMinutes: 20, label: "上午" },
   { startHour: 12, endHour: 18, limitMinutes: 30, label: "下午" },
-  { startHour: 18, endHour: 24, limitMinutes: 30, label: "晚上" },
+  { startHour: 18, endHour: 24, limitMinutes: null, label: "晚上" },
 ]);
 
 function instant(value, name) {
@@ -76,9 +76,8 @@ export function evaluateReleaseQuota({ intervals = [], proposedStart, proposedEn
       limitMinutes: period.limitMinutes,
       usedMinutes: minutes(usedMs),
       addedMinutes: minutes(totalMs - usedMs),
-      remainingMinutes: minutes(period.limitMinutes * MINUTE_MS - totalMs),
+      remainingMinutes: Number.isFinite(period.limitMinutes) ? minutes(period.limitMinutes * MINUTE_MS - totalMs) : null,
     };
   });
-  return { allowed: periods.every((period) => period.remainingMinutes >= 0), periods };
+  return { allowed: periods.every((period) => period.remainingMinutes === null || period.remainingMinutes >= 0), periods };
 }
-
