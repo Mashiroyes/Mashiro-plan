@@ -20,14 +20,14 @@ export async function createLocalControlServer({ handleMessage, host = "127.0.0.
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, `http://${host}`);
-      if (!tokenMatches(request, token)) {
-        response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
-        response.end("Unauthorized");
-        return;
-      }
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
         response.end(html.replaceAll("__MASHIRO_TOKEN__", token));
+        return;
+      }
+      if (!tokenMatches(request, token)) {
+        response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+        response.end("Unauthorized");
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/command") {
