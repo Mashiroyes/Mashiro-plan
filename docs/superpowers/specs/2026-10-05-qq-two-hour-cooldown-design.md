@@ -7,6 +7,8 @@ Keep the existing temporary QQ session feature, but require a fixed 120-minute c
 ## Behavior
 
 - `玩QQ N分钟` continues to accept play durations from 1 through 60 minutes under the existing daily time-window rules.
+- New QQ sessions are rejected all day from Monday through Saturday in the `Asia/Shanghai` calendar.
+- Sunday keeps the existing local-time window: a session may start at or after 12:00 only when its requested play deadline does not exceed 22:00.
 - A newly activated session sets `cooldownEndsAt` to `playEndsAt + 120 minutes`.
 - While a session is in cooldown, another QQ session cannot be created.
 - When cooldown ends, QQ remains protected; the next valid `玩QQ N分钟` command restores and starts it.
@@ -16,8 +18,9 @@ Keep the existing temporary QQ session feature, but require a fixed 120-minute c
 ## Implementation
 
 - Change the canonical `QQ_COOLDOWN_MINUTES` constant from 60 to 120.
+- Extend the canonical start-eligibility check so only Sunday requests can pass the existing 12:00—22:00 boundary.
 - Keep all scheduling, storage, worker, and temporary-launch code intact so every consumer uses the new constant automatically for new sessions.
-- Update user-facing help text from a fixed 60-minute cooldown to a fixed 120-minute cooldown.
+- Update rejection and help text to state the Sunday-only rule and fixed 120-minute cooldown.
 - Update model, storage, plugin, and PowerShell worker regression tests to prove the new-session calculation and the preservation of stored historical deadlines.
 
 ## Deployment and Verification
