@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('Inspect','Install','Uninstall')][string]$Action,
     [string]$SourcePluginRoot = (Split-Path -Parent $PSScriptRoot),
     [string]$SqlitePath,
+    [string]$RuntimeDescriptorPath = '',
     [string]$RuntimeBase = (Join-Path $env:LOCALAPPDATA 'MashiroBot\english-skills'),
     [string]$TaskSuffix = ''
 )
@@ -25,9 +26,10 @@ $legacyTaskName = "MashiroBot English Skills Dashboard$TaskSuffix"
 $planRoot = Split-Path -Parent (Split-Path -Parent $SourcePluginRoot)
 if (-not $SqlitePath) { $SqlitePath = Join-Path $planRoot 'sqlite\openclaw-planner.sqlite' }
 $SqlitePath = [IO.Path]::GetFullPath($SqlitePath)
-$pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
-$python = (Get-Command python.exe -ErrorAction Stop).Source
-$node = (Get-Command node.exe -ErrorAction Stop).Source
+$runtime = if ($RuntimeDescriptorPath) { Get-Content -LiteralPath ([IO.Path]::GetFullPath($RuntimeDescriptorPath)) -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
+$pwsh = if ($runtime) { [string]$runtime.pwshPath } else { (Get-Command pwsh.exe -ErrorAction Stop).Source }
+$python = if ($runtime) { [string]$runtime.pythonPath } else { (Get-Command python.exe -ErrorAction Stop).Source }
+$node = if ($runtime) { [string]$runtime.nodePath } else { (Get-Command node.exe -ErrorAction Stop).Source }
 $wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
 $jobCli = Join-Path $planRoot 'core\control\job-cli.mjs'
 $backupCli = Join-Path $planRoot 'core\control\backup-cli.mjs'
@@ -151,7 +153,9 @@ foreach ($taskDefinition in $taskDefinitions) {
     $jobId = 'english-skills:' + $taskDefinition.PeriodType
     $arguments = '"{0}" "{1}" "{2}" "{3}" "{4}" "{5}" "{6}" 1' -f $launcher, $pwsh, $worker, $RuntimePlugin, $SqlitePath, $taskDefinition.PeriodType, $jobId
     $workerArguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -PluginRoot "{1}" -SqlitePath "{2}" -PeriodType "{3}" -JobId "{4}" -JobVersion 1' -f $worker,$RuntimePlugin,$SqlitePath,$taskDefinition.PeriodType,$jobId
-    $reconcile = @{executable=$pwsh;argumentList=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action','Install','-SqlitePath',$SqlitePath,'-SourcePluginRoot',$SourcePluginRoot,'-RuntimeBase',$RuntimeBase,'-TaskSuffix',$TaskSuffix)}
+    $reconcileArguments=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action','Install','-SqlitePath',$SqlitePath,'-SourcePluginRoot',$SourcePluginRoot,'-RuntimeBase',$RuntimeBase,'-TaskSuffix',$TaskSuffix)
+    if($RuntimeDescriptorPath){$reconcileArguments+=@('-RuntimeDescriptorPath',[IO.Path]::GetFullPath($RuntimeDescriptorPath))}
+    $reconcile = @{executable=$pwsh;argumentList=$reconcileArguments}
     [void](Invoke-JobCli 'upsert' @{jobId=$jobId;version=1;owner='mashirobot-plugin-language';kind='english-statistics';taskName=$taskDefinition.Name;runAt=(Get-Date).Date.AddHours($(if($taskDefinition.TriggerType -eq 'daily'){10}else{11})).ToString('o');recurrence=@{calendar=$taskDefinition.TriggerType};payload=@{execution=@{executable=$pwsh;arguments=$workerArguments};reconcile=$reconcile}})
     $actionObject = New-ScheduledTaskAction -Execute $wscript -Argument $arguments
     $temporaryTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddYears(10)

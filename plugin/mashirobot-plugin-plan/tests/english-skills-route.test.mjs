@@ -34,3 +34,27 @@ test("all requested English chart phrases return a Python PNG", async (t) => {
     assert.equal(existsSync(result.mediaPaths[0]), true, phrase);
   }
 });
+
+test("TED-Ed listening input persists through the real planner runtime", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "teded-listening-route-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const context = {
+    sqlitePath: path.join(root, "planner.sqlite"),
+    tempRoot: path.join(root, "temp"),
+    now: new Date("2026-10-12T09:30:00+08:00"),
+  };
+  const phrase = "今日英语听力：12 What staying up all night does to your brain - Anna Rothschild";
+  const result = await handle(phrase, context);
+  assert.equal(result.command, "记录TED-Ed英语听力");
+  assert.match(result.reply, /10月14日、10月19日、11月2日、12月11日/u);
+  const state = await createPlanRuntime(context).runPlanner([
+    "get-plugin-state", "--plugin-id", "mashirobot-plugin-language", "--state-key", "teded-listening:v1",
+  ]);
+  assert.equal(state.found, true);
+  assert.deepEqual(state.value.videos[0], {
+    number: 12,
+    title: "What staying up all night does to your brain - Anna Rothschild",
+    studiedOn: "2026-10-12",
+    reviewDates: ["2026-10-14", "2026-10-19", "2026-11-02", "2026-12-11"],
+  });
+});

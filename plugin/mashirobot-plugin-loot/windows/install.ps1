@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][ValidateSet('Install', 'Inspect', 'Uninstall')][string]$Action,
     [string]$SqlitePath = '',
+    [string]$RuntimeDescriptorPath = '',
     [string]$SourcePluginRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
@@ -14,8 +15,9 @@ $RuntimePlugin = Join-Path $RuntimeRoot 'plugin'
 $EveningTask = 'MashiroBot Loot Evening'
 $MorningTask = 'MashiroBot Loot Morning'
 $OldTasks = @('OpenClaw-Daily-Water-1000', 'OpenClaw-Daily-EnglishJournal-2100')
-$Pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
-$Node = (Get-Command node.exe -ErrorAction Stop).Source
+$Runtime = if ($RuntimeDescriptorPath) { Get-Content -LiteralPath ([IO.Path]::GetFullPath($RuntimeDescriptorPath)) -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
+$Pwsh = if ($Runtime) { [string]$Runtime.pwshPath } else { (Get-Command pwsh.exe -ErrorAction Stop).Source }
+$Node = if ($Runtime) { [string]$Runtime.nodePath } else { (Get-Command node.exe -ErrorAction Stop).Source }
 $JobCli = Join-Path $PlanRoot 'core\control\job-cli.mjs'
 
 function Invoke-JobCli([string]$Mode,[hashtable]$Payload) {
@@ -49,7 +51,9 @@ function Register-LootTasks {
     $eveningJob='loot:evening';$morningJob='loot:morning'
     $eveningArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Evening -SqlitePath "{1}" -NodePath "{2}" -JobId "{3}" -JobVersion 2' -f (Join-Path $RuntimePlugin 'windows\loot-worker.ps1'), $Sqlite, $Node, $eveningJob
     $morningArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Morning -SqlitePath "{1}" -NodePath "{2}" -JobId "{3}" -JobVersion 1' -f (Join-Path $RuntimePlugin 'windows\loot-worker.ps1'), $Sqlite, $Node, $morningJob
-    $reconcile=@{executable=$Pwsh;argumentList=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action','Install','-SqlitePath',$Sqlite,'-SourcePluginRoot',$SourcePluginRoot)}
+    $reconcileArguments=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action','Install','-SqlitePath',$Sqlite,'-SourcePluginRoot',$SourcePluginRoot)
+    if($RuntimeDescriptorPath){$reconcileArguments+=@('-RuntimeDescriptorPath',[IO.Path]::GetFullPath($RuntimeDescriptorPath))}
+    $reconcile=@{executable=$Pwsh;argumentList=$reconcileArguments}
     Invoke-JobCli 'upsert' @{jobId=$eveningJob;version=2;owner='mashirobot-plugin-loot';kind='loot-evening';taskName=$EveningTask;runAt=([DateTimeOffset]::Now.Date.AddHours(21).AddMinutes(15).ToString('o'));recurrence=@{dailyTimes=@('21:15','21:50')};payload=@{execution=@{executable=$Pwsh;arguments=$eveningArguments};reconcile=$reconcile}}|Out-Null
     Invoke-JobCli 'upsert' @{jobId=$morningJob;version=1;owner='mashirobot-plugin-loot';kind='loot-morning';taskName=$MorningTask;runAt=([DateTimeOffset]::Now.Date.AddDays(1).AddHours(10).ToString('o'));recurrence=@{dailyTimes=@('10:00')};payload=@{execution=@{executable=$Pwsh;arguments=$morningArguments};reconcile=$reconcile}}|Out-Null
     $eveningAction = New-ScheduledTaskAction -Execute $Pwsh -Argument $eveningArguments

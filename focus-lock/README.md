@@ -21,4 +21,6 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\focus-lock\FocusLock.ps1 -Mode I
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\focus-lock\FocusLock.ps1 -Mode Status
 ```
 
+成人内容与 Pixiv 使用永久多层限制：Cloudflare Families 成人内容 DNS、Chrome/Edge 安全 DNS禁用、hosts、浏览器 URLBlocklist、Clash REJECT，以及常见独立 VPN/代理客户端的 IFEO 启动限制。Clash Verge 不被禁止，因为它承载现有网络和 REJECT 规则。该限制没有日常临时解除入口；拥有本机管理员权限的人仍可最终删除本地规则或重装系统。
+
 MashiroBot 的禁止名单插件会把自己的 worker 部署到 ProgramData，并通过插件内的 `bilibili-qq-expiry.default.json` 恢复旧版兼容状态。运行时状态、隔离区、计划任务和本机软件路径不能直接由 Git 恢复，需在新电脑重新安装并重新选择软件路径。

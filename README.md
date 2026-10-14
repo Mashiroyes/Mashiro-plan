@@ -4,7 +4,11 @@
 
 ## 新电脑部署
 
+手机独立执行的功能、源码与换机复现说明见 [手机端工具](mobile/README.md)。手机 QQ/TIM 限制通过 Termux 使用，不依赖本机机器人在线。
+
 完整的环境、依赖、数据库迁移、安装顺序和验收命令见 [新电脑部署指南](docs/new-computer-setup.md)。
+
+本次新机部署的具体故障、验收缺口和下一次 20 分钟目标见 [部署复盘](new-computer-deployment-retrospective-2026-09-29.md)。
 
 迁移时务必注意：
 

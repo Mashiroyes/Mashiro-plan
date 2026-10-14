@@ -7,7 +7,10 @@ import { buildTask } from "./core/timer-manager.mjs";
 import { createGameTimerStore } from "./core/storage.mjs";
 import { createGameVaultStore } from "./core/game-vault-storage.mjs";
 import { createScheduler } from "./core/scheduler.mjs";
-import { parseQqSessionCommand, canStartQqSession, QQ_BEFORE_NOON_REPLY } from "./core/qq-session-parser.mjs";
+import {
+  parseQqSessionCommand, evaluateQqSessionWindow, QQ_BEFORE_NOON_REPLY,
+  QQ_OUTSIDE_DAILY_WINDOW_REPLY, QQ_SUNDAY_ONLY_REPLY, QQ_SUNDAY_ENDED_REPLY, QQ_SUNDAY_LIMIT_REPLY,
+} from "./core/qq-session-parser.mjs";
 import { buildQqRequest } from "./core/qq-session-model.mjs";
 import { createQqSessionStore } from "./core/qq-session-storage.mjs";
 import { createQqSessionScheduler } from "./core/qq-session-scheduler.mjs";
@@ -155,7 +158,14 @@ export async function handle(message, context = {}) {
   const qqCommand = parseQqSessionCommand(text);
   if (qqCommand) {
     const now = context.now ?? new Date();
-    if (!canStartQqSession(now) && !hasTemporaryQqNoonRelease(context, now)) return reply(QQ_BEFORE_NOON_REPLY, "QQ限时");
+    const window = evaluateQqSessionWindow(now, qqCommand);
+    if (!window.allowed) {
+      const message = window.reason === "not-sunday" ? QQ_SUNDAY_ONLY_REPLY
+        : window.reason === "sunday-ended" ? QQ_SUNDAY_ENDED_REPLY
+        : window.reason === "before-noon" ? QQ_BEFORE_NOON_REPLY
+          : QQ_OUTSIDE_DAILY_WINDOW_REPLY;
+      return reply(message, "QQ限时");
+    }
     const databasePath = sqlitePath(context);
     let store = null;
     if (fs.existsSync(databasePath)) {
@@ -167,25 +177,35 @@ export async function handle(message, context = {}) {
     const preflight = context.qqPreflight ? await context.qqPreflight({ now, scheduler }) : await scheduler.preflight();
     if (!preflight?.ok) return reply(`暂时不能开始QQ限时：${(preflight?.errors ?? ["执行环境未通过检查"]).join("；")}。`, "QQ限时");
     store ??= createQqSessionStore(databasePath);
-    const request = buildQqRequest({ now, minutes: qqCommand.minutes });
+    const request = buildQqRequest({
+      now, minutes: qqCommand.windowPolicy === "sunday-4h" ? window.playMinutes : qqCommand.minutes,
+      windowPolicy: qqCommand.windowPolicy ?? "daily",
+      specialLocalDate: qqCommand.windowPolicy === "sunday-4h" ? window.localDate : null,
+    });
     const pending = store.createPreparing(request);
     if (!pending.created) {
+      if (pending.reason === "sunday-limit") return reply(QQ_SUNDAY_LIMIT_REPLY, "QQ限时");
       return reply(formatExistingQqSession(pending.session), "QQ限时");
     }
+    let scheduled;
     try {
-      const scheduled = await scheduler.begin(request);
-      const session = scheduled.session ?? store.get(request.id);
-      if (!session?.confirmedAt || session.phase !== "playing") throw new Error("QQ启动文件恢复后未能开始计时");
-      const qqPaths = preflight.status?.status?.qqExecutablePaths ?? scheduled.status?.qqExecutablePaths ?? [];
-      refreshAuditTargets(context, readGames(context), qqPaths);
-      const cooldownMinutes = Math.round((new Date(session.cooldownEndsAt).getTime() - new Date(session.playEndsAt).getTime()) / 60_000);
-      return reply(`QQ已允许使用 ${session.playMinutes} 分钟。\n${formatAt(session.playEndsAt)} 到期后关闭QQ，并把启动文件移入保护目录。\n之后进入${cooldownMinutes}分钟冷却，结束于 ${formatAt(session.cooldownEndsAt)}；冷却结束也不会自动恢复，下一次“玩QQ N分钟”才会恢复。QQ官网始终保持限制。`, "QQ限时");
+      scheduled = await scheduler.begin(request);
+      const confirmed = scheduled.session ?? store.get(request.id);
+      if (!confirmed?.confirmedAt || confirmed.phase !== "playing" || scheduled.launch?.ok === false) throw new Error("QQ启动文件恢复后未能开始计时");
+      if (request.windowPolicy === "sunday-4h" && !confirmed.specialConsumedAt) throw new Error("周日4小时QQ会话未完成当日次数登记");
     } catch (error) {
       store.fail(request.id, error.message);
       let recoveryError = null;
       try { await scheduler.recover(); } catch (recoveryFailure) { recoveryError = recoveryFailure; }
-      return reply(`QQ限时没有启动：${error.message}${recoveryError ? `；恢复也失败：${recoveryError.message}` : ""}`, "QQ限时");
+      return reply(`QQ限时没有启动：${error.message}${recoveryError ? `；回滚也失败：${recoveryError.message}` : "；已回滚本次授权"}`, "QQ限时");
     }
+    const session = scheduled.session ?? store.get(request.id);
+    const qqPaths = scheduled.launch?.executablePaths ?? preflight.status?.status?.qqExecutablePaths ?? scheduled.status?.qqExecutablePaths ?? [];
+    let auditWarning = null;
+    try { refreshAuditTargets(context, readGames(context), qqPaths); }
+    catch (error) { auditWarning = `使用审计刷新失败：${error.message}`; }
+    const cooldownMinutes = Math.round((new Date(session.cooldownEndsAt).getTime() - new Date(session.playEndsAt).getTime()) / 60_000);
+    return reply(`QQ已允许使用 ${session.playMinutes} 分钟。\n${formatAt(session.playEndsAt)} 到期后关闭QQ，并把启动文件移入保护目录。\n之后进入${cooldownMinutes}分钟冷却，结束于 ${formatAt(session.cooldownEndsAt)}；冷却结束也不会自动恢复，下一次“玩QQ N分钟”才会恢复。QQ官网始终保持限制。${auditWarning ? `\n警告：${auditWarning}，不影响本次QQ启动和计时。` : ""}`, "QQ限时");
   }
   if (blockPlugin.match(text)) return await blockPlugin.handle(text, context);
   const command = parseGameTimerCommand(text);
@@ -314,7 +334,8 @@ export function getHelp() {
       {
         title: "QQ限时与使用审计",
         items: [
-          "玩QQ1—60分钟（每天12:00后可用）",
+          "玩QQ1—60分钟（每天12:00—22:00可用）",
+          "周末玩QQ4h（仅星期日、当天一次；20:00后截短到24:00）",
           "查询今日使用审计 / 查询本周使用审计 / 查询QQ使用",
           "QQ到期只保护启动文件，保留登录、聊天记录、缓存和安装目录",
         ],
@@ -350,8 +371,9 @@ export function getHelp() {
       {
         title: "QQ特殊规则",
         items: [
-          "12:00前拒绝QQ请求且不改变任何限制",
+          "每天仅12:00—22:00可用",
           "客户端按指令临时放行1—60分钟；当天第1次冷却60分钟，之后每次增加10分钟",
+          "周末玩QQ4h仅星期日可成功启动一次；20:00前最多4小时，之后截短到24:00，结束后冷却60分钟",
           "QQ官网始终受限；冷却结束不恢复启动文件，QQ安装包会被自动删除",
           "QQ和清单中所有游戏只累计真实前台时间",
         ],

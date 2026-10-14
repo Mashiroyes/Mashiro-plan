@@ -2,7 +2,7 @@
 param(
  [ValidateSet('Reconcile','RestoreAll','Status')][string]$Mode='Reconcile',
  [Parameter(Mandatory=$true)][string]$SqlitePath,
- [string]$StateRoot=(Join-Path $env:ProgramData 'MashiroBot\game-locker'),
+ [string]$StateRoot=(Join-Path $env:ProgramData 'MashiroBot\game-locker'),[string]$NodePath='node',
  [string]$Now,[switch]$FixtureMode
 )
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
@@ -14,7 +14,7 @@ $controlCli=Join-Path $PSScriptRoot 'control\reminder-cli.mjs'
 $taskPrefix='MashiroBot-GameLocker-Restore-';$mainTask='MashiroBot-GameLocker-Reconcile'
 $recoverTask='MashiroBot-GameLocker-RecoverAll'
 function B64($v){[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($v|ConvertTo-Json -Depth 10 -Compress)))}
-function Db($command,$payload=$null){$args=@($helper,$command,$SqlitePath);if($null-ne$payload){$args+=B64 $payload};$raw=& node @args 2>&1;if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)};if($raw){($raw-join'')|ConvertFrom-Json -DateKind String}}
+function Db($command,$payload=$null){$args=@($helper,$command,$SqlitePath);if($null-ne$payload){$args+=B64 $payload};$raw=& $NodePath @args 2>&1;if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)};if($raw){($raw-join'')|ConvertFrom-Json -DateKind String}}
 function Update($row,$values){$values.updated_at=$clock.ToString('o');[void](Db 'update64' @{id=$row.id;values=$values})}
 function Journal-Prepare($row,$source,$dest,$hash){$id=[guid]::NewGuid().ToString();[void](Db 'journal-prepare' @{operationId=$id;targetKey=[string]$row.game_key;sourcePath=$source;destinationPath=$dest;expectedSha256=$hash;ruleId=[string]$row.task_id;at=$clock.ToString('o')});Update $row @{operation_id=$id};$id}
 function Journal-Transition($row,$state,$error=$null){if($row.operation_id){[void](Db 'journal-transition' @{operationId=[string]$row.operation_id;state=$state;error=$error;at=$clock.ToString('o')})}}
@@ -23,12 +23,12 @@ function Notify($message){
  if($FixtureMode){return}
  try{
   $payload=@{sourcePlugin='mashirobot-plugin-game-timer';kind='game-protection';priority=5;content=[string]$message;requiresAck=$false;dueAt=$clock.ToString('o')}|ConvertTo-Json -Compress
-  $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload));$raw=& node $controlCli dispatch $SqlitePath $encoded 2>&1
+  $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload));$raw=& $NodePath $controlCli dispatch $SqlitePath $encoded 2>&1
   if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)};$managed=($raw-join'')|ConvertFrom-Json
   if(-not[bool]$managed.shouldSend){return}
   if(-not(Test-Path -LiteralPath $MachineModule -PathType Leaf)){throw "MashiroBot machine configuration helper is missing: $MachineModule"};Import-Module $MachineModule -Force;$delivery=Resolve-MashiroWeixinDelivery
   & $delivery.OpenClawCommand message send --json --channel openclaw-weixin --account $delivery.Account --target $delivery.Target --message ([string]$managed.message)|Out-Null
-  $finish=@{reminderIds=@($managed.reminderIds);ok=$true}|ConvertTo-Json -Compress;$finish64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($finish));& node $controlCli finish $SqlitePath $finish64|Out-Null
+  $finish=@{reminderIds=@($managed.reminderIds);ok=$true}|ConvertTo-Json -Compress;$finish64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($finish));& $NodePath $controlCli finish $SqlitePath $finish64|Out-Null
  }catch{Log("notify failed: $($_.Exception.Message)")}
 }
 function Ensure-RecoveryTask {

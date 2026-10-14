@@ -24,7 +24,10 @@ function parseDate(text, now) {
   if (text.includes("后天")) return { date: shiftDate(currentDate, 2) };
   if (text.includes("明天") || text.includes("明早") || text.includes("明晚")) return { date: shiftDate(currentDate, 1) };
   if (text.includes("今天") || text.includes("今晚") || text.includes("今早")) return { date: currentDate };
-  return { error: "请补充日期，例如“明天早上 7 点喊我起床”。" };
+  // A wakeup command without an explicit date is for the current Shanghai day.
+  // The later past-time check remains the single guard against accidentally
+  // creating an alarm for a time that has already passed.
+  return { date: currentDate };
 }
 
 function parseTime(text) {

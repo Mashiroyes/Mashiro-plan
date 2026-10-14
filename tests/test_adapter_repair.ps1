@@ -28,11 +28,13 @@ function New-FakePackage {
     param(
         [Parameter(Mandatory)][string]$Root,
         [ValidateSet('KnownOld', 'Canonical', 'UnknownFast', 'UnknownProcess')]
-        [string]$Layout = 'KnownOld'
+        [string]$Layout = 'KnownOld',
+        [string]$Version = '2.4.8'
     )
 
     $Messaging = Join-Path $Root 'dist\src\messaging'
     New-Item -ItemType Directory -Path $Messaging -Force | Out-Null
+    @{ name='@tencent-weixin/openclaw-weixin'; version=$Version } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Root 'package.json') -Encoding utf8
 
     $OldFast = @'
 import { runPlanner } from "file:///D:/BaiduSyncdisk/Study/AI/codex/codex-study/plan/script/bridge/openclaw-router.mjs";
@@ -101,9 +103,11 @@ Assert-True (Test-Path -LiteralPath $GatewayWrapper -PathType Leaf) 'gateway wra
 Assert-True (Test-Path -LiteralPath $HealthScript -PathType Leaf) 'health script must exist'
 
 $CanonicalText = Get-Content -LiteralPath $CanonicalAdapter -Raw -Encoding utf8
-$script:GeneratedCanonicalText = $CanonicalText.Replace('__MASHIROBOT_INDEX_URI__', $IndexUri)
-Assert-True ($CanonicalText -match 'handleMashiroBotMessage as handleFastRoutineCommand') 'canonical adapter must export the MashiroBot handler'
+$EscapedPlanRoot = ([IO.Path]::GetFullPath($PlanRoot)).Replace('\','\\').Replace('"','\"')
+$script:GeneratedCanonicalText = $CanonicalText.Replace('__MASHIROBOT_INDEX_URI__', $IndexUri).Replace('__MASHIROBOT_PLAN_ROOT__', $EscapedPlanRoot)
+Assert-True ($CanonicalText -match 'handleFastRoutineCommand\s*=\s*handleMashiroBotMessage') 'canonical adapter must export the MashiroBot handler'
 Assert-True ($CanonicalText -match '__MASHIROBOT_INDEX_URI__') 'canonical adapter must use the generated index URI placeholder'
+Assert-True ($CanonicalText -match '__MASHIROBOT_PLAN_ROOT__') 'canonical adapter must use the generated Plan root placeholder'
 
 $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("MashiroBotAdapterTest-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $TempRoot | Out-Null
@@ -141,6 +145,12 @@ try {
     Assert-Equal 0 $LASTEXITCODE 'second repair must succeed'
     Assert-Equal $BackupCount @(Get-ChildItem -LiteralPath $KnownMessaging -Filter '*.bak.mashirobot-*').Count 'second repair must not create backups'
 
+    $Known244Root = Join-Path $TempRoot 'known-2.4.4'
+    $Known244Messaging = New-FakePackage -Root $Known244Root -Layout KnownOld -Version '2.4.4'
+    & $RepairScript -PackageRoot $Known244Root | Out-Null
+    Assert-Equal 0 $LASTEXITCODE 'observed 2.4.4 layout must repair successfully'
+    Assert-Equal $script:GeneratedCanonicalText (Get-Content -LiteralPath (Join-Path $Known244Messaging 'fast-routine.js') -Raw -Encoding utf8) '2.4.4 must receive the same verified adapter contract'
+
     # Already repaired package is a no-op.
     $CanonicalRoot = Join-Path $TempRoot 'canonical'
     $CanonicalMessaging = New-FakePackage -Root $CanonicalRoot -Layout Canonical
@@ -160,6 +170,15 @@ try {
         Assert-Equal $OriginalProcess (Get-Content -LiteralPath (Join-Path $UnknownMessaging 'process-message.js') -Raw -Encoding utf8) "$Layout must preserve process-message.js"
         Assert-Equal 0 @(Get-ChildItem -LiteralPath $UnknownMessaging -Filter '*.bak.mashirobot-*').Count "$Layout must not create backups"
     }
+
+    $UnknownVersionRoot = Join-Path $TempRoot 'unknown-version'
+    $UnknownVersionMessaging = New-FakePackage -Root $UnknownVersionRoot -Layout KnownOld
+    @{ name='@tencent-weixin/openclaw-weixin'; version='9.9.9' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $UnknownVersionRoot 'package.json') -Encoding utf8
+    $UnknownVersionFast = Get-Content -LiteralPath (Join-Path $UnknownVersionMessaging 'fast-routine.js') -Raw -Encoding utf8
+    $ExitCode = Invoke-RepairExpectFailure -PackageRoot $UnknownVersionRoot
+    Assert-True ($ExitCode -ne 0) 'unknown package version must fail'
+    Assert-Equal $UnknownVersionFast (Get-Content -LiteralPath (Join-Path $UnknownVersionMessaging 'fast-routine.js') -Raw -Encoding utf8) 'unknown package version must remain untouched'
+    Assert-Equal 0 @(Get-ChildItem -LiteralPath $UnknownVersionMessaging -Filter '*.bak.mashirobot-*').Count 'unknown package version must not create backups'
 
     # A validation failure after writes must restore both originals.
     $RollbackRoot = Join-Path $TempRoot 'rollback'
@@ -184,6 +203,7 @@ try {
     $HealthText = Get-Content -LiteralPath $HealthScript -Raw -Encoding utf8
     Assert-True ($HealthText -match 'Microsoft\\WindowsApps\\pwsh\.exe') 'gateway health must recognize the stable PowerShell app alias'
     Assert-True ($HealthText -match 'Test-Path -LiteralPath \$StablePwshAlias -PathType Leaf') 'gateway health must require the stable alias to exist'
+    Assert-True ($HealthText -match '-not \$Static -and -not \$PreStart') 'pre-start health must not be blocked by the independent QQ heartbeat'
 
     Write-Output 'PASS: adapter repair, rollback, idempotence, and wrapper tests'
 }

@@ -107,7 +107,7 @@
 保存计划时会同步提供英语分类数据；查看统计、管理关键词和图表由 [语言学习插件](../mashirobot-plugin-language/README.md) 负责。
 
 
-自动发送不做每日轮询，而是由三个 Windows 日历任务直接触发：`MashiroBot English Skills Weekly` 每周一 11:00 发送上周，`MashiroBot English Skills Monthly` 每月 1 日 11:00 发送上个月，`MashiroBot English Skills Yearly` 每年 1 月 1 日 11:00 发送去年。任务带有明确周期参数，电脑错过时间后补跑也会计算正确的上一周期；成功记录具有幂等保护。
+自动发送不做每日轮询，而是由四个 Windows 日历任务直接触发：`MashiroBot English Skills Daily` 每天 10:00 分别发送英语学习计划文字和 TED-Ed 复习清单；`MashiroBot English Skills Weekly` 每周一 11:00 发送上周，`MashiroBot English Skills Monthly` 每月 1 日 11:00 发送上个月，`MashiroBot English Skills Yearly` 每年 1 月 1 日 11:00 发送去年。日任务必须核验微信返回的发送状态和消息 ID；统计图单独发送，图片上传失败不会吞掉两条文字提醒。任务带有明确周期参数，电脑错过时间后补跑也会计算正确的上一周期；成功记录具有幂等保护。
 
 安装或更新自动发送任务：
 
@@ -260,6 +260,7 @@ mashirobot-plugin-plan/
 | `OpenClaw-Plan-*` | 计划项目到点提醒 | 一次，到点可补跑 |
 | `OpenClaw-General-*` | 通用提醒 | 每 5 分钟，直到 `收到` |
 | `OpenClaw-Wakeup-*` | 起床提醒 | 每 10 分钟，直到 `已起床` |
+| `MashiroBot English Skills Daily` | 英语学习计划和 TED-Ed 复习清单 | 每天 10:00 |
 | `MashiroBot English Skills Weekly` | 自动发送上周英语四项统计图 | 每周一 11:00 |
 | `MashiroBot English Skills Monthly` | 自动发送上月英语四项统计图 | 每月 1 日 11:00 |
 | `MashiroBot English Skills Yearly` | 自动发送去年英语四项统计图 | 每年 1 月 1 日 11:00 |

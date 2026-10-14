@@ -1,29 +1,59 @@
 [CmdletBinding()]
 param(
- [ValidateSet('Capture','PrepareAndStart','LaunchInteractive','Reconcile','Watch','Recover','Status')][string]$Mode='Status',
- [Parameter(Mandatory=$true)][string]$SqlitePath,[string]$SessionId,[string]$InstallerPath,
+ [ValidateSet('Capture','PrepareAndStart','LaunchInteractive','Reconcile','Watch','Resume','Recover','Status','ManualRestore','ManualProtect','MaintenanceRestore')][string]$Mode='Status',
+ [Parameter(Mandatory=$true)][string]$SqlitePath,[string]$SessionId,[string]$InstallerPath,[string]$NodePath='node',
  [string]$StateRoot=(Join-Path $env:ProgramData 'MashiroBot\mashirobot-plugin-game-timer\qq'),
  [string]$FocusLockRoot=(Join-Path $env:ProgramData 'CodexFocusLock'),
  [string]$HostsPath=(Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'),
+ [string]$ExecutableContainerRoot,[string]$ContainerConfigPath,
  [string]$Now,[switch]$FixtureMode,[switch]$SkipSignatureValidation,[string]$FixtureInstallPath,[string]$FixtureDownloadsPath
 )
 $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
 $OutputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=$OutputEncoding
 $helper=Join-Path $PSScriptRoot 'qq-session-db-v1.mjs'; $authPath=Join-Path $FocusLockRoot 'qq-play-authorization.json'
-$focusScript=Join-Path $FocusLockRoot 'FocusLock.ps1'; $vaultRoot=Join-Path $StateRoot 'vault'; $executableVaultRoot=Join-Path $StateRoot 'installed-executable-vault'; $stageRoot=Join-Path $StateRoot 'staging'
+$containerHelper=Join-Path $PSScriptRoot 'qq-executable-container-v2.ps1';if(-not(Test-Path -LiteralPath $containerHelper -PathType Leaf)){throw 'QQ executable container helper is missing.'};. $containerHelper
+$focusScript=Join-Path $FocusLockRoot 'FocusLock.ps1'; $vaultRoot=Join-Path $StateRoot 'vault'; $stageRoot=Join-Path $StateRoot 'staging'
+if(-not $ContainerConfigPath){$ContainerConfigPath=Join-Path $StateRoot 'runtime-cache.json'}
+$script:containerKeyProtector=if($FixtureMode){{param([byte[]]$key)[byte[]]$key.Clone()}}else{$null}
+$script:containerKeyUnprotector=if($FixtureMode){{param([byte[]]$wrapped)[byte[]]$wrapped.Clone()}}else{$null}
+$timeoutPrompt=Join-Path $FocusLockRoot 'TimeoutReadingPrompt.ps1'
 $statusPath=Join-Path $StateRoot 'last-status.json';$launchStatusPath=Join-Path $StateRoot 'launch-status.json';$launchTaskName='MashiroBot-QQSession-Launch'; $clients=@('QQ.exe','QQNT.exe','TencentQQ.exe','QQLauncher.exe','QQScLauncher.exe','QQProtect.exe','TIM.exe')
 $domains=@('im.qq.com','pc.qq.com','dldir.qq.com','dldir1.qq.com','dldir1v6.qq.com','download.imqq.com')
 $installerPattern='^(QQ|QQNT|TencentQQ|QQInstaller|QQSetup|TIM)(?=[0-9._ -]|$).*\.(exe|msi)$'
 $clock=if($Now){[DateTimeOffset]::Parse($Now).ToUniversalTime()}else{[DateTimeOffset]::UtcNow}
 function Refresh-Clock { if(-not $Now){$script:clock=[DateTimeOffset]::UtcNow} }
+function Test-QQSessionWindow($session) {
+ if(-not $session){throw 'QQ session is missing.'}
+ $china=[TimeZoneInfo]::FindSystemTimeZoneById('China Standard Time')
+ if([string]$session.windowPolicy -eq 'sunday-4h'){
+  if([int]$session.playMinutes-lt1-or[int]$session.playMinutes-gt240){throw 'Sunday QQ session must be between 1 and 240 minutes.'}
+  $requested=[TimeZoneInfo]::ConvertTime([DateTimeOffset]::Parse([string]$session.requestedAt),$china)
+  $requestedDate=$requested.ToString('yyyy-MM-dd')
+  if($requested.DayOfWeek-ne[DayOfWeek]::Sunday-or[string]$session.specialLocalDate-ne$requestedDate){throw 'Sunday QQ session policy is invalid.'}
+  $local=[TimeZoneInfo]::ConvertTime($clock,$china)
+  $midnight=[DateTimeOffset]::new($local.Year,$local.Month,$local.Day,0,0,0,$local.Offset).AddDays(1)
+  if($local.DayOfWeek-ne[DayOfWeek]::Sunday){throw 'Sunday QQ session cannot start after Monday midnight.'}
+  if($session.playEndsAt){
+   $sessionEnd=[DateTimeOffset]::Parse([string]$session.playEndsAt).ToUniversalTime()
+   if($sessionEnd-gt$midnight.ToUniversalTime()){throw 'Sunday QQ session must end before Monday midnight.'}
+  }
+  return $true
+ }
+ if([string]$session.windowPolicy -and[string]$session.windowPolicy-ne'daily'){throw 'QQ session window policy is invalid.'}
+ $local=[TimeZoneInfo]::ConvertTime($clock,$china)
+ $close=[DateTimeOffset]::new($local.Year,$local.Month,$local.Day,22,0,0,$local.Offset)
+ $sessionEnd=if($session.playEndsAt){[DateTimeOffset]::Parse([string]$session.playEndsAt).ToUniversalTime()}else{$clock.AddMinutes([int]$session.playMinutes)}
+ if($local.Hour -lt 12 -or $local.Hour -ge 22 -or $sessionEnd -gt $close.ToUniversalTime()){throw 'QQ only allows sessions daily from 12:00 through 22:00 China Standard Time.'}
+ $true
+}
 function B64($v){[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($v|ConvertTo-Json -Depth 12 -Compress)))}
 function Db($command,$payload=$null){
- $args=@($helper,$command,$SqlitePath); if($null-ne $payload){$args+=B64 $payload}; $raw=& node @args 2>&1
+ $args=@($helper,$command,$SqlitePath); if($null-ne $payload){$args+=B64 $payload}; $raw=& $NodePath @args 2>&1
  if($LASTEXITCODE-ne 0){throw "QQ database helper failed ($command): $($raw-join [Environment]::NewLine)"}
  $text=($raw|Where-Object{$_-notmatch '^\(node:'})-join ''; if($text){$text|ConvertFrom-Json -DateKind String}
 }
 function Session { if($SessionId){Db 'get' @{id=$SessionId}}else{Db 'latest-open'} }
-function Save-Atomic($path,$value){New-Item -ItemType Directory -Path (Split-Path -Parent $path)-Force|Out-Null;$tmp="$path.$([guid]::NewGuid().ToString('N')).tmp";$value|ConvertTo-Json -Depth 12|Set-Content -LiteralPath $tmp -Encoding UTF8;Move-Item -LiteralPath $tmp -Destination $path -Force}
+function Save-Atomic($path,$value){New-Item -ItemType Directory -Path (Split-Path -Parent $path)-Force|Out-Null;$tmp="$path.$([guid]::NewGuid().ToString('N')).tmp";$value|ConvertTo-Json -Depth 12|Set-Content -LiteralPath $tmp -Encoding UTF8;[IO.File]::Move($tmp,$path,$true)}
 function Authorize($session,[Nullable[DateTimeOffset]]$install,[Nullable[DateTimeOffset]]$play){
  if(-not $install -and -not $play -and (Test-Path -LiteralPath $authPath)){
   try{
@@ -37,7 +67,14 @@ function Authorize($session,[Nullable[DateTimeOffset]]$install,[Nullable[DateTim
 }
 function Auth {if(Test-Path -LiteralPath $authPath){try{Get-Content -Raw -LiteralPath $authPath -Encoding UTF8|ConvertFrom-Json -DateKind String}catch{$null}}}
 function Play-Allowed($session){$a=Auth;if(-not $a-or-not $session-or [string]$a.SessionId-ne[string]$session.id){return $false};try{$clock-lt[DateTimeOffset]::Parse([string]$a.QQPlayUntil).ToUniversalTime()}catch{$false}}
+function Manual-Allowed {$a=Auth;if(-not $a -or [string]$a.SessionId -ne 'manual-temporary-release'){return $false};try{$clock -lt [DateTimeOffset]::Parse([string]$a.QQPlayUntil).ToUniversalTime()}catch{$false}}
 function Apply-Focus {if($FixtureMode){return};if(-not(Test-Path -LiteralPath $focusScript)){throw 'CodexFocusLock script is missing.'};& $focusScript -Mode Reapply|Out-Null}
+function Submit-TimeoutReading($session){
+ if(-not $session-or-not $session.playEndsAt-or-not(Test-Path -LiteralPath $timeoutPrompt -PathType Leaf)){return}
+ $eventKey="qq:{0}:{1}" -f [string]$session.id,[string]$session.playEndsAt
+ if($FixtureMode){& $timeoutPrompt -Mode Submit -EventKey $eventKey -FixtureMode | Out-Null}
+ else{& $timeoutPrompt -Mode Submit -EventKey $eventKey | Out-Null}
+}
 function Barrier($session){if($FixtureMode){return -not(Play-Allowed $session)};foreach($image in $clients){if(-not(Test-Path -LiteralPath "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$image")){return $false}};$true}
 function Website-Blocked {if(-not(Test-Path -LiteralPath $HostsPath)){return $false};$text=[IO.File]::ReadAllText($HostsPath);foreach($d in $domains){if($text-notmatch "(?m)^\s*(?:0\.0\.0\.0|127\.0\.0\.1)\s+$([regex]::Escape($d))\s*$"){return $false}};$true}
 function Valid-Installer($file){if($file.Name-notmatch $installerPattern){return $false};if($SkipSignatureValidation){return $true};$sig=Get-AuthenticodeSignature -LiteralPath $file.FullName;$sig.Status-eq'Valid'-and[string]$sig.SignerCertificate.Subject-match'(?i)Tencent'}
@@ -76,10 +113,44 @@ function Discover-QQExecutable {
 }
 function Exe-Paths {$path=Discover-QQExecutable;if($path){@($path)}else{@()}}
 function Installed {@(Exe-Paths).Count -gt 0}
-function Executable-Vault {Db 'installed-vault-active'}
+function Executable-Vault {Db 'installed-vault-active-internal'}
+function Assert-SystemWorker {if($FixtureMode){return};if([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -ne 'S-1-5-18'){throw 'This QQ vault operation requires the SYSTEM account.'}}
+function Resolve-ExecutableContainerRoot {
+ if($ExecutableContainerRoot){return [IO.Path]::GetFullPath($ExecutableContainerRoot)}
+ if(-not$ContainerConfigPath-or-not(Test-Path -LiteralPath $ContainerConfigPath -PathType Leaf)){throw 'QQ encrypted container configuration is missing.'}
+ $config=Get-Content -LiteralPath $ContainerConfigPath -Raw -Encoding UTF8|ConvertFrom-Json
+ if(-not$config.Root){throw 'QQ encrypted container root is missing from configuration.'}
+ [IO.Path]::GetFullPath([string]$config.Root)
+}
+function New-OpaqueContainerPath {
+ $root=Resolve-ExecutableContainerRoot
+ New-Item -ItemType Directory -Path $root -Force|Out-Null
+ $name=[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24)).ToLowerInvariant()+'.dat'
+ Join-Path $root $name
+}
+function Test-PlainExecutableRecord($path,$record) {
+ if(-not(Test-Path -LiteralPath $path -PathType Leaf)){return $false}
+ try{
+  $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+  if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){return $false}
+  if(-not $SkipSignatureValidation){$sig=Get-AuthenticodeSignature -LiteralPath $item.FullName;if($sig.Status -ne 'Valid' -or [string]$sig.SignerCertificate.Subject -notmatch '(?i)Tencent'){return $false}}
+  (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -eq [string]$record.sha256
+ }catch{$false}
+}
+function Test-EncryptedExecutableRecord($record) {
+ $script:lastContainerValidationError=$null
+ $path=[string]$record.vaultPath;if(-not(Test-Path -LiteralPath $path -PathType Leaf)){return $false}
+ New-Item -ItemType Directory -Path $stageRoot -Force|Out-Null
+ $temporary=Join-Path $stageRoot ('verify-'+[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(12)).ToLowerInvariant()+'.tmp')
+ try{
+  [void](Expand-QQEncryptedContainer -ContainerPath $path -DestinationPath $temporary -KeyUnprotector $script:containerKeyUnprotector)
+  Test-PlainExecutableRecord $temporary $record
+ }catch{$script:lastContainerValidationError=$_.Exception.Message;$false}finally{Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue}
+}
 function Valid-ProtectedExecutable($record) {
  if(-not $record -or [string]$record.state -notin @('protected','protecting','restoring')){return $false}
  $path=[string]$record.vaultPath;if(-not(Test-Path -LiteralPath $path -PathType Leaf)){return $false}
+ if([int]$record.formatVersion-eq2){return (Test-EncryptedExecutableRecord $record)}
  if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne [string]$record.sha256){return $false}
  if(-not $SkipSignatureValidation){$sig=Get-AuthenticodeSignature -LiteralPath $path;if($sig.Status -ne 'Valid' -or [string]$sig.SignerCertificate.Subject -notmatch '(?i)Tencent'){return $false}}
  $true
@@ -127,25 +198,65 @@ function Stop-QQ($path) {
  if($matches.Count){Start-Sleep -Seconds 3}
  foreach($process in $matches){try{$process.Refresh();if(-not $process.HasExited){Stop-Process -Id $process.Id -Force -ErrorAction Stop}}catch{}}
 }
+function Migrate-LegacyExecutableVault {
+ Assert-SystemWorker
+ $record=Executable-Vault
+ if(-not$record-or[int]$record.formatVersion-eq2-or[string]$record.state-ne'protected'){return}
+ $legacy=[string]$record.vaultPath
+ if(-not(Test-PlainExecutableRecord $legacy $record)){Update-ExecutableVault @{state='invalid';error='Legacy protected QQ.exe verification failed.';updatedAt=$clock.ToString('o')};throw 'Legacy protected QQ.exe verification failed.'}
+ $container=New-OpaqueContainerPath
+ try{
+  [void](Write-QQEncryptedContainer -SourcePath $legacy -ContainerPath $container -KeyProtector $script:containerKeyProtector)
+  $candidate=[pscustomobject]@{vaultPath=$container;formatVersion=2;sha256=[string]$record.sha256;state='protected'}
+  if(-not(Test-EncryptedExecutableRecord $candidate)){throw 'Encrypted QQ.exe migration verification failed.'}
+  [void](Update-ExecutableVault @{vaultPath=$container;formatVersion=2;state='protected';error=$null;updatedAt=$clock.ToString('o')})
+  Remove-Item -LiteralPath $legacy -Force
+ }catch{Remove-Item -LiteralPath $container -Force -ErrorAction SilentlyContinue;throw}
+}
 function Protect-QQExecutable {
+ Assert-SystemWorker
  $path=Discover-QQExecutable;if(-not $path){throw 'Installed Tencent QQ.exe was not found.'}
  Stop-QQ $path;[void](Assert-QQExecutable $path)
- New-Item -ItemType Directory -Path $executableVaultRoot -Force | Out-Null
- $dir=Join-Path $executableVaultRoot ([guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $dir | Out-Null
- $dest=Join-Path $dir (([guid]::NewGuid().ToString('N'))+'.bin');$hash=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
- [void](Save-ExecutableVault @{originalPath=$path;vaultPath=$dest;sha256=$hash;signer=(Signer $path);state='protecting';protectedAt=$clock.ToString('o');updatedAt=$clock.ToString('o')})
- Move-Item -LiteralPath $path -Destination $dest
+ $dest=New-OpaqueContainerPath;$hash=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+ try{
+  [void](Write-QQEncryptedContainer -SourcePath $path -ContainerPath $dest -KeyProtector $script:containerKeyProtector)
+  $candidate=[pscustomobject]@{vaultPath=$dest;formatVersion=2;sha256=$hash;state='protecting'}
+  if(-not(Test-EncryptedExecutableRecord $candidate)){throw "Encrypted QQ.exe verification failed: $script:lastContainerValidationError"}
+ }catch{Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue;throw}
+ [void](Save-ExecutableVault @{originalPath=$path;vaultPath=$dest;formatVersion=2;sha256=$hash;signer=(Signer $path);state='protecting';protectedAt=$clock.ToString('o');updatedAt=$clock.ToString('o')})
+ Remove-Item -LiteralPath $path -Force
  Update-ExecutableVault @{state='protected';protectedAt=$clock.ToString('o');error=$null;updatedAt=$clock.ToString('o')}
 }
 function Restore-QQExecutable {
  $record=Executable-Vault
  if(-not $record){$path=Discover-QQExecutable;if(-not $path){throw 'Installed Tencent QQ.exe was not found.'};return $path}
  if([string]$record.state -eq 'available'){$path=Discover-QQExecutable;if(-not $path){throw 'Installed Tencent QQ.exe was not found.'};return $path}
+ $dest=[string]$record.originalPath
+ if(Test-Path -LiteralPath $dest){
+  try{
+   [void](Assert-QQExecutable $dest)
+   if((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash -eq [string]$record.sha256){
+    [void](Update-ExecutableVault @{state='available';vaultPath=$null;restoredAt=$clock.ToString('o');error=$null;updatedAt=$clock.ToString('o')})
+    if($record.vaultPath){Remove-Item -LiteralPath ([string]$record.vaultPath) -Force -ErrorAction SilentlyContinue}
+    return $dest
+   }
+  }catch{}
+  Update-ExecutableVault @{state='conflict';error='QQ.exe original path is occupied by a different file.';updatedAt=$clock.ToString('o')};throw 'QQ.exe restoration conflict: original path is occupied by a different file.'
+ }
  if(-not(Valid-ProtectedExecutable $record)){Update-ExecutableVault @{state='invalid';error='Protected QQ.exe verification failed.';updatedAt=$clock.ToString('o')};throw 'Protected QQ.exe is missing or failed verification.'}
- $dest=[string]$record.originalPath;if(Test-Path -LiteralPath $dest){Update-ExecutableVault @{state='conflict';error='QQ.exe original path is occupied.';updatedAt=$clock.ToString('o')};throw 'QQ.exe restoration conflict: original path is occupied.'}
+ if([int]$record.formatVersion-eq2){Assert-SystemWorker}
  [void](Update-ExecutableVault @{state='restoring';updatedAt=$clock.ToString('o')});New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
- Move-Item -LiteralPath ([string]$record.vaultPath) -Destination $dest;[void](Assert-QQExecutable $dest)
+ if([int]$record.formatVersion-eq2){
+  $temporary=Join-Path (Split-Path -Parent $dest) ('.qq-restore-'+[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(12)).ToLowerInvariant()+'.tmp')
+  try{
+   [void](Expand-QQEncryptedContainer -ContainerPath ([string]$record.vaultPath) -DestinationPath $temporary -KeyUnprotector $script:containerKeyUnprotector)
+   if(-not(Test-PlainExecutableRecord $temporary $record)){throw 'Restored QQ.exe verification failed.'}
+   [IO.File]::Move($temporary,$dest,$false)
+  }finally{Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue}
+ }else{Move-Item -LiteralPath ([string]$record.vaultPath) -Destination $dest}
+ [void](Assert-QQExecutable $dest)
  [void](Update-ExecutableVault @{state='available';vaultPath=$null;restoredAt=$clock.ToString('o');error=$null;updatedAt=$clock.ToString('o')})
+ if([int]$record.formatVersion-eq2){Remove-Item -LiteralPath ([string]$record.vaultPath) -Force -ErrorAction SilentlyContinue}
  $dest
 }
 function Installer-Roots {
@@ -168,19 +279,38 @@ function Delete-QQInstaller($path) {
 function Recover-ExecutableVault {
  $record=Executable-Vault;if(-not $record){return}
  $source=[string]$record.originalPath;$vault=[string]$record.vaultPath
- if([string]$record.state -eq 'protecting' -and (Test-Path -LiteralPath $vault) -and -not(Test-Path -LiteralPath $source) -and (Valid-ProtectedExecutable $record)){Update-ExecutableVault @{state='protected';error=$null;updatedAt=$clock.ToString('o')};return}
- if([string]$record.state -eq 'restoring' -and -not(Test-Path -LiteralPath $vault) -and (Test-Path -LiteralPath $source)){try{[void](Assert-QQExecutable $source);Update-ExecutableVault @{state='available';vaultPath=$null;restoredAt=$clock.ToString('o');error=$null;updatedAt=$clock.ToString('o')}}catch{Update-ExecutableVault @{state='invalid';error=$_.Exception.Message;updatedAt=$clock.ToString('o')}}}
+ if([string]$record.state -in @('invalid','conflict') -and (Test-Path -LiteralPath $source -PathType Leaf)){
+  try{
+   [void](Assert-QQExecutable $source)
+   if((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -eq [string]$record.sha256){[void](Update-ExecutableVault @{state='available';vaultPath=$null;restoredAt=$clock.ToString('o');error=$null;updatedAt=$clock.ToString('o')});if($vault){Remove-Item -LiteralPath $vault -Force -ErrorAction SilentlyContinue};return}
+  }catch{}
+ }
+ if([string]$record.state -eq 'protecting'){
+  $sourceValid=Test-PlainExecutableRecord $source $record;$vaultValid=Valid-ProtectedExecutable $record
+  if($vaultValid){if($sourceValid){Remove-Item -LiteralPath $source -Force};Update-ExecutableVault @{state='protected';error=$null;updatedAt=$clock.ToString('o')};return}
+  if($sourceValid){Update-ExecutableVault @{state='available';vaultPath=$null;error=$null;updatedAt=$clock.ToString('o')};return}
+  Update-ExecutableVault @{state='invalid';error='Neither protecting copy is valid.';updatedAt=$clock.ToString('o')};return
+ }
+ if([string]$record.state -eq 'restoring'){
+  if(Test-PlainExecutableRecord $source $record){Update-ExecutableVault @{state='available';vaultPath=$null;restoredAt=$clock.ToString('o');error=$null;updatedAt=$clock.ToString('o')};if($vault){Remove-Item -LiteralPath $vault -Force -ErrorAction SilentlyContinue};return}
+  if(Valid-ProtectedExecutable $record){Update-ExecutableVault @{state='protected';error=$null;updatedAt=$clock.ToString('o')};return}
+  Update-ExecutableVault @{state='invalid';error='QQ.exe restoration recovery found no valid copy.';updatedAt=$clock.ToString('o')}
+ }
 }
 function Phase($s){if(-not $s){return 'ready'};if([string]$s.phase -eq 'preparing' -or -not $s.playEndsAt){return [string]$s.phase};if($clock -lt [DateTimeOffset]::Parse([string]$s.playEndsAt).ToUniversalTime()){return 'playing'};if($clock -lt [DateTimeOffset]::Parse([string]$s.cooldownEndsAt).ToUniversalTime()){return 'cooldown'};'ready'}
-function Status($s){$record=Executable-Vault;$path=Discover-QQExecutable;$allowed=Play-Allowed $s;$interactive=if($FixtureMode){$allowed-and[bool]$path}else{$false};if(-not$FixtureMode-and$allowed-and$path){$launch=if(Test-Path -LiteralPath $launchStatusPath){try{Get-Content -Raw -LiteralPath $launchStatusPath|ConvertFrom-Json -DateKind String}catch{$null}}else{$null};if($launch-and[string]$launch.sessionId-eq[string]$s.id){$interactive=@(QQ-Processes $path ([int]$launch.desktopSessionId)).Count-gt 0}};[ordered]@{ok=$true;phase=(Phase $s);sessionId=if($s){[string]$s.id}else{$null};session=$s;authorizationActive=$allowed;clientBarrierActive=(Barrier $s);websiteBlockActive=(Website-Blocked);vaultReady=([bool]$path -or (Valid-ProtectedExecutable $record));installedExecutableVault=$record;executableReady=([bool]$path -or (Valid-ProtectedExecutable $record));stagingClear=$true;qqInstalled=([bool]$path);interactiveProcessActive=$interactive;qqExecutablePaths=@($path|Where-Object{$_});currentTime=$clock.ToString('o')}}
+function Public-ExecutableVault($record){if(-not $record){return $null};[ordered]@{state=[string]$record.state;formatVersion=[int]$record.formatVersion;sha256=[string]$record.sha256;signer=[string]$record.signer;protectedAt=$record.protectedAt;restoredAt=$record.restoredAt;updatedAt=$record.updatedAt;error=$record.error}}
+function Status($s){$record=Executable-Vault;$path=Discover-QQExecutable;$allowed=Play-Allowed $s;$interactive=if($FixtureMode){$allowed-and[bool]$path}else{$false};if(-not$FixtureMode-and$allowed-and$path){$launch=if(Test-Path -LiteralPath $launchStatusPath){try{Get-Content -Raw -LiteralPath $launchStatusPath|ConvertFrom-Json -DateKind String}catch{$null}}else{$null};if($launch-and[string]$launch.sessionId-eq[string]$s.id){$interactive=@(QQ-Processes $path ([int]$launch.desktopSessionId)).Count-gt 0}};$vaultReady=([bool]$path -or (Valid-ProtectedExecutable $record));[ordered]@{ok=$true;phase=(Phase $s);sessionId=if($s){[string]$s.id}else{$null};session=$s;authorizationActive=$allowed;clientBarrierActive=(Barrier $s);websiteBlockActive=(Website-Blocked);vaultReady=$vaultReady;installedExecutableVault=(Public-ExecutableVault $record);executableReady=$vaultReady;stagingClear=$true;qqInstalled=([bool]$path);interactiveProcessActive=$interactive;qqExecutablePaths=@($path|Where-Object{$_});currentTime=$clock.ToString('o')}}
 function Prepare($s){
- if(-not $s -or [string]$s.phase -ne 'preparing'){throw 'No preparing QQ request exists.'};Remove-QQInstallers
+ if(-not $s -or [string]$s.phase -ne 'preparing'){throw 'No preparing QQ request exists.'}
  $path=$null
  try{
+  [void](Test-QQSessionWindow $s);Remove-QQInstallers
   $restored=@(Restore-QQExecutable);if($restored.Count-ne 1-or$restored[0]-isnot[string]){throw 'QQ executable restoration returned an invalid path.'};$path=[string]$restored[0]
   $s=Db 'activate64' @{id=$s.id;confirmedAt=$clock.ToString('o');tasks=@{reconcileTaskName='MashiroBot-QQSession-Reconcile'}}
   Authorize $s $null ([DateTimeOffset]::Parse([string]$s.playEndsAt));Apply-Focus;if(Barrier $s){throw 'QQ play authorization did not release the client barrier.'}
-  [void](Request-InteractiveLaunch $s $path);$result=Status $s;if(-not$result.interactiveProcessActive){throw 'QQ desktop process verification failed.'};$result
+  [void](Request-InteractiveLaunch $s $path)
+  if([string]$s.windowPolicy-eq'sunday-4h'){$s=Db 'consume-sunday64' @{id=$s.id;consumedAt=$clock.ToString('o')}}
+  $result=Status $s;if(-not$result.interactiveProcessActive){throw 'QQ desktop process verification failed.'};$result
  }catch{
   $message=$_.Exception.Message;$current=Session
   try{Authorize $current $null $null;Apply-Focus;if($path-and(Test-Path -LiteralPath $path)){[void](Protect-QQExecutable)}}catch{}
@@ -188,8 +318,22 @@ function Prepare($s){
   throw $message
  }
 }
+function Resume($s){
+ if(-not $s-or[string]$s.phase-ne'cooldown'-or-not$s.playEndsAt-or$clock-ge[DateTimeOffset]::Parse([string]$s.playEndsAt).ToUniversalTime()){throw 'No prematurely closed QQ session is eligible for resume.'}
+ $path=$null;$resumed=$false
+ try{
+  [void](Test-QQSessionWindow $s);$restored=@(Restore-QQExecutable);if($restored.Count-ne 1-or$restored[0]-isnot[string]){throw 'QQ executable restoration returned an invalid path.'};$path=[string]$restored[0]
+  $s=Db 'resume64' @{id=$s.id;updatedAt=$clock.ToString('o')};$resumed=$true
+  Authorize $s $null ([DateTimeOffset]::Parse([string]$s.playEndsAt));Apply-Focus;if(Barrier $s){throw 'QQ play authorization did not release the client barrier.'}
+  [void](Request-InteractiveLaunch $s $path);$result=Status $s;if(-not$result.interactiveProcessActive){throw 'QQ desktop process verification failed.'};$result
+ }catch{
+  $message=$_.Exception.Message;try{Authorize $s $null $null;Apply-Focus;if($path-and(Test-Path -LiteralPath $path)){[void](Protect-QQExecutable)}}catch{}
+  if($resumed){try{[void](Db 'phase64' @{id=$s.id;phase='cooldown';updatedAt=[DateTimeOffset]::UtcNow.ToString('o');event=@{action='premature_close_resume_rollback';result='failed';error=$message}})}catch{}}
+  throw $message
+ }
+}
 function Reconcile($s){
- Remove-QQInstallers;Recover-ExecutableVault
+ Remove-QQInstallers;Recover-ExecutableVault;Migrate-LegacyExecutableVault
  if(-not $s){
   Authorize $null $null $null;Apply-Focus
   if(Discover-QQExecutable){[void](Protect-QQExecutable)}
@@ -201,7 +345,15 @@ function Reconcile($s){
   return Reconcile (Session)
  }
  $phase=Phase $s
- if($phase -eq 'playing'){Authorize $s $null ([DateTimeOffset]::Parse([string]$s.playEndsAt));Apply-Focus;return Status $s}
+ if($phase -eq 'playing'){
+  try{[void](Test-QQSessionWindow $s)}catch{
+   Authorize $s $null $null;Apply-Focus;if(-not(Barrier $s)){throw 'Permanent QQ client barrier was not restored at the daily window boundary.'}
+   [void](Protect-QQExecutable)
+   $s=Db 'phase64' @{id=$s.id;phase='cooldown';updatedAt=$clock.ToString('o');event=@{action='qq_daily_window_closed';result='ok';uninstallResult='not_used'}}
+   return Status $s
+  }
+  Authorize $s $null ([DateTimeOffset]::Parse([string]$s.playEndsAt));Apply-Focus;return Status $s
+ }
  Authorize $s $null $null;Apply-Focus
  if(-not(Barrier $s)){throw 'Permanent QQ client barrier was not restored.'}
  if([string]$s.phase -eq 'playing'){
@@ -213,9 +365,19 @@ function Reconcile($s){
    throw
   }
  }
+ if($phase -eq 'cooldown') { Submit-TimeoutReading $s }
  if($phase -eq 'ready' -and [string]$s.phase -ne 'ready'){$s=Db 'phase64' @{id=$s.id;phase='ready';updatedAt=$clock.ToString('o');event=@{action='cooldown_completed';result='ok'}}}
  Status $s
 }
-function Watch {while($true){Refresh-Clock;$s=Session;$status=Reconcile $s;Save-Atomic $statusPath $status;if(-not $s -or [string]$status.phase -eq 'ready'){return $status};$fresh=Session;$deadline=if([string]$status.phase -eq 'playing'){[DateTimeOffset]::Parse([string]$fresh.playEndsAt)}else{[DateTimeOffset]::Parse([string]$fresh.cooldownEndsAt)};$seconds=[Math]::Ceiling(($deadline.ToUniversalTime()-[DateTimeOffset]::UtcNow).TotalSeconds);if($seconds -gt 0){Start-Sleep -Seconds ([Math]::Max(1,[int]$seconds))}}}
+function Watch {while($true){Refresh-Clock;$s=Session;$status=Reconcile $s;Save-Atomic $statusPath $status;if(-not $s -or [string]$status.phase -eq 'ready'){return $status};$fresh=Session;$deadline=if([string]$status.phase -eq 'playing'){[DateTimeOffset]::Parse([string]$fresh.playEndsAt)}else{[DateTimeOffset]::Parse([string]$fresh.cooldownEndsAt)};$seconds=[Math]::Ceiling(($deadline.ToUniversalTime()-[DateTimeOffset]::UtcNow).TotalSeconds);if($seconds -gt 0){Start-Sleep -Seconds ([Math]::Min(60,[Math]::Max(1,[int]$seconds)))}}}
+function Manual-Restore {
+ Assert-SystemWorker;if(-not(Manual-Allowed)){throw 'Manual QQ release authorization is missing or expired.'}
+ [void](Restore-QQExecutable);Apply-Focus;$result=Status $null;$result['manualAuthorizationActive']=$true;$result
+}
+function Manual-Protect {
+ Assert-SystemWorker;if(Manual-Allowed){throw 'Manual QQ release authorization is still active.'}
+ Authorize $null $null $null;Apply-Focus;if(Discover-QQExecutable){[void](Protect-QQExecutable)};$result=Status $null;$result['manualAuthorizationActive']=$false;$result
+}
+function Maintenance-Restore {Assert-SystemWorker;[void](Restore-QQExecutable);Status $null}
 $session=Session
-try{$result=switch($Mode){'Capture'{if(-not $InstallerPath){throw 'Capture requires -InstallerPath.'};Delete-QQInstaller $InstallerPath;[ordered]@{ok=$true;deleted=$true}}'PrepareAndStart'{Prepare $session}'LaunchInteractive'{Launch-Interactive $session}'Reconcile'{Reconcile $session}'Watch'{Watch}'Recover'{Remove-QQInstallers;Recover-ExecutableVault;Authorize $session $null $null;Apply-Focus;Status $session}'Status'{Status $session}};if($Mode-eq'LaunchInteractive'){Save-Atomic $launchStatusPath $result}elseif($Mode-notin@('Status','Capture')){Save-Atomic $statusPath $result};[pscustomobject]$result|ConvertTo-Json -Depth 12 -Compress}catch{$message=$_.Exception.Message;try{[void](Db 'event64' @{sessionId=if($session){$session.id}else{$null};occurredAt=[DateTimeOffset]::UtcNow.ToString('o');event=@{action="worker_$($Mode.ToLowerInvariant())";result='failed';error=$message}})}catch{};if($Mode-eq'LaunchInteractive'){Save-Atomic $launchStatusPath ([ordered]@{ok=$false;sessionId=if($session){[string]$session.id}else{$null};error=$message;failedAt=[DateTimeOffset]::UtcNow.ToString('o')})}elseif($Mode-in@('PrepareAndStart','Watch')){Save-Atomic $statusPath ([ordered]@{ok=$false;phase='failed';sessionId=if($session){[string]$session.id}else{$null};error=$message;currentTime=[DateTimeOffset]::UtcNow.ToString('o')})};throw}
+try{$result=switch($Mode){'Capture'{if(-not $InstallerPath){throw 'Capture requires -InstallerPath.'};Delete-QQInstaller $InstallerPath;[ordered]@{ok=$true;deleted=$true}}'PrepareAndStart'{Prepare $session}'LaunchInteractive'{Launch-Interactive $session}'Reconcile'{Reconcile $session}'Watch'{Watch}'Resume'{Resume $session}'Recover'{Remove-QQInstallers;Recover-ExecutableVault;Authorize $session $null $null;Apply-Focus;Status $session}'ManualRestore'{Manual-Restore}'ManualProtect'{Manual-Protect}'MaintenanceRestore'{Maintenance-Restore}'Status'{Status $session}};if($Mode-eq'LaunchInteractive'){Save-Atomic $launchStatusPath $result}elseif($Mode-notin@('Status','Capture')){Save-Atomic $statusPath $result};[pscustomobject]$result|ConvertTo-Json -Depth 12 -Compress}catch{$message=$_.Exception.Message;try{[void](Db 'event64' @{sessionId=if($session){$session.id}else{$null};occurredAt=[DateTimeOffset]::UtcNow.ToString('o');event=@{action="worker_$($Mode.ToLowerInvariant())";result='failed';error=$message}})}catch{};if($Mode-eq'LaunchInteractive'){Save-Atomic $launchStatusPath ([ordered]@{ok=$false;sessionId=if($session){[string]$session.id}else{$null};error=$message;failedAt=[DateTimeOffset]::UtcNow.ToString('o')})}elseif($Mode-in@('PrepareAndStart','Watch','Resume','ManualRestore','ManualProtect','MaintenanceRestore')){Save-Atomic $statusPath ([ordered]@{ok=$false;phase='failed';sessionId=if($session){[string]$session.id}else{$null};error=$message;currentTime=[DateTimeOffset]::UtcNow.ToString('o')})};throw}

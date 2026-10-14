@@ -53,9 +53,10 @@ try {
     process.stdout.write(JSON.stringify(rows));
   } else if (mode === "expire") {
     const rules = db.prepare("UPDATE block_rules SET active=0,updated_at=? WHERE active=1 AND expires_at IS NOT NULL AND expires_at<=?").run(now, now).changes;
+    const expiredReleases = db.prepare("SELECT target_key,display_name,expires_at FROM block_releases WHERE expires_at<=? ORDER BY target_key").all(now);
     const releases = db.prepare("DELETE FROM block_releases WHERE expires_at<=?").run(now).changes;
     db.prepare("DELETE FROM block_release_intervals WHERE end_at<?").run(new Date(Date.now() - 9 * 86_400_000).toISOString());
-    process.stdout.write(JSON.stringify({ ok: true, expiredRules: rules, expiredReleases: releases }));
+    process.stdout.write(JSON.stringify({ ok: true, expiredRules: rules, expiredReleaseCount: releases, expiredReleases }));
   } else {
     throw new Error(`unknown mode: ${mode}`);
   }

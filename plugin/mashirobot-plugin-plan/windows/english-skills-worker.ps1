@@ -83,8 +83,43 @@ function Format-Duration([int]$Minutes) {
 
 function New-ReportMessage {
     param([hashtable]$Period, [hashtable]$Summary)
-    if ($Summary.inactivityWarning) { return [string]$Summary.inactivityWarning }
-    return '暂无间隔提醒。'
+    $body = if ($Summary.inactivityWarning) { [string]$Summary.inactivityWarning } else { '暂无间隔提醒。' }
+    if ($Period.periodKey -like 'month-to-date:*') { return '今日英语学习计划：' + [Environment]::NewLine + $body }
+    return $body
+}
+
+function New-ReviewMessage {
+    param([hashtable]$Period, [datetime]$LocalDate)
+    if ($Period.periodKey -notlike 'month-to-date:*') { return $null }
+    $state = Invoke-PlannerJson @('get-plugin-state', '--plugin-id', 'mashirobot-plugin-language', '--state-key', 'teded-listening:v1')
+    $today = $LocalDate.ToString('yyyy-MM-dd')
+    $dueVideos = if ($state.found -and $null -ne $state.value.videos) {
+        @($state.value.videos | Where-Object { @($_.reviewDates) -contains $today } | Sort-Object { [int]$_.number })
+    } else { @() }
+    if ($dueVideos.Count -eq 0) {
+        '今日无 TED-Ed 复习。'
+    } else {
+        @('今日 TED-Ed 复习（1.5倍速）：') + @($dueVideos | ForEach-Object { '#{0} {1}' -f [int]$_.number, [string]$_.title }) -join [Environment]::NewLine
+    }
+}
+
+function Invoke-WeixinSend {
+    param(
+        [Parameter(Mandatory = $true)]$Delivery,
+        [Parameter(Mandatory = $true)][string]$Message,
+        [string]$MediaPath = ''
+    )
+    $arguments = @('message', 'send', '--json', '--channel', 'openclaw-weixin', '--account', [string]$Delivery.Account, '--target', [string]$Delivery.Target, '--message', $Message)
+    if ($MediaPath) { $arguments += @('--media', $MediaPath) }
+    $raw = & $Delivery.OpenClawCommand @arguments 2>&1
+    if ($LASTEXITCODE -ne 0) { throw ($raw -join [Environment]::NewLine) }
+    try { $result = (($raw -join [Environment]::NewLine) | ConvertFrom-Json -AsHashtable) }
+    catch { throw ('OpenClaw did not return valid delivery JSON: ' + ($raw -join [Environment]::NewLine)) }
+    $messageId = if ($result.result -and $result.result.messageId) { [string]$result.result.messageId } elseif ($result.messageId) { [string]$result.messageId } else { '' }
+    if ([string]$result.deliveryStatus -ne 'sent' -or -not $messageId) {
+        throw ('WeChat delivery was not verified: ' + ($result | ConvertTo-Json -Compress -Depth 8))
+    }
+    return [ordered]@{ deliveryStatus = [string]$result.deliveryStatus; messageId = $messageId }
 }
 
 $localNow = if ($Now) { [DateTimeOffset]::Parse($Now).ToOffset([TimeSpan]::FromHours(8)).DateTime } else { [DateTimeOffset]::Now.ToOffset([TimeSpan]::FromHours(8)).DateTime }
@@ -123,18 +158,41 @@ foreach ($period in $due) {
         $encoded = ConvertTo-Base64Json $summary
         $null = Invoke-PlannerJson @('english-skills-chart', '--payload-base64', $encoded, '--output', $chartPath)
         $message = New-ReportMessage $period $summary
+        $reviewMessage = New-ReviewMessage $period $localNow
+        $planDelivery = $null
+        $reviewDelivery = $null
+        $chartDelivery = $null
+        $chartError = $null
         if (-not $DryRun) {
-            $managed = Invoke-ControlReminder 'dispatch' @{sourcePlugin='mashirobot-plugin-language';kind='statistics';priority=1;content=$message;requiresAck=$false;dedupeKey=("english:"+$period.periodKey);sourceRef=$period.periodKey;dueAt=[DateTimeOffset]::UtcNow.ToString('o')}
-            if(-not[bool]$managed.shouldSend){$null=Invoke-PlannerJson @('finish-english-skill-delivery','--period-key',$period.periodKey,'--status','failed','--error','suppressed by reminder control');$results += [ordered]@{periodKey=$period.periodKey;action='suppressed';reason=$managed.reason};continue}
             if (-not (Test-Path -LiteralPath $machineModule -PathType Leaf)) { throw "MashiroBot machine configuration helper is missing: $machineModule" }
             Import-Module $machineModule -Force
             $delivery = Resolve-MashiroWeixinDelivery
-            $sendOutput = & $delivery.OpenClawCommand message send --json --channel 'openclaw-weixin' --account $delivery.Account --target $delivery.Target --message ([string]$managed.message) --media $chartPath 2>&1
-            if ($LASTEXITCODE -ne 0) { throw ($sendOutput -join [Environment]::NewLine) }
-            [void](Invoke-ControlReminder 'finish' @{reminderIds=@($managed.reminderIds);ok=$true})
+
+            if ($reviewMessage) {
+                $managed = Invoke-ControlReminder 'dispatch' @{sourcePlugin='mashirobot-plugin-language';kind='learning-plan';priority=1;content=$message;requiresAck=$false;dedupeKey=("english-plan:"+$period.periodKey);sourceRef=$period.periodKey;dueAt=[DateTimeOffset]::UtcNow.ToString('o')}
+                if(-not[bool]$managed.shouldSend){throw ('English learning-plan reminder was suppressed: ' + [string]$managed.reason)}
+                $planDelivery = Invoke-WeixinSend -Delivery $delivery -Message ([string]$managed.message)
+                [void](Invoke-ControlReminder 'finish' @{reminderIds=@($managed.reminderIds);ok=$true})
+                $managed = $null
+
+                $managed = Invoke-ControlReminder 'dispatch' @{sourcePlugin='mashirobot-plugin-language';kind='teded-review';priority=1;content=$reviewMessage;requiresAck=$false;dedupeKey=("teded:"+$localNow.ToString('yyyy-MM-dd'));sourceRef=$localNow.ToString('yyyy-MM-dd');dueAt=[DateTimeOffset]::UtcNow.ToString('o')}
+                if(-not[bool]$managed.shouldSend){throw ('TED-Ed review reminder was suppressed: ' + [string]$managed.reason)}
+                $reviewDelivery = Invoke-WeixinSend -Delivery $delivery -Message ([string]$managed.message)
+                [void](Invoke-ControlReminder 'finish' @{reminderIds=@($managed.reminderIds);ok=$true})
+                $managed = $null
+
+                try { $chartDelivery = Invoke-WeixinSend -Delivery $delivery -Message '本月英语学习统计图。' -MediaPath $chartPath }
+                catch { $chartError = $_.Exception.Message }
+            } else {
+                $managed = Invoke-ControlReminder 'dispatch' @{sourcePlugin='mashirobot-plugin-language';kind='statistics';priority=1;content=$message;requiresAck=$false;dedupeKey=("english:"+$period.periodKey);sourceRef=$period.periodKey;dueAt=[DateTimeOffset]::UtcNow.ToString('o')}
+                if(-not[bool]$managed.shouldSend){throw ('English statistics reminder was suppressed: ' + [string]$managed.reason)}
+                $chartDelivery = Invoke-WeixinSend -Delivery $delivery -Message ([string]$managed.message) -MediaPath $chartPath
+                [void](Invoke-ControlReminder 'finish' @{reminderIds=@($managed.reminderIds);ok=$true})
+                $managed = $null
+            }
             $null = Invoke-PlannerJson @('finish-english-skill-delivery', '--period-key', $period.periodKey, '--status', 'sent')
         }
-        $results += [ordered]@{ periodKey = $period.periodKey; action = if ($DryRun) { 'dry-run' } else { 'sent' }; fromDate = $period.fromDate; toDate = $period.toDate; mediaPath = $chartPath; message = $message }
+        $results += [ordered]@{ periodKey = $period.periodKey; action = if ($DryRun) { 'dry-run' } else { 'sent' }; fromDate = $period.fromDate; toDate = $period.toDate; mediaPath = $chartPath; message = $message; reviewMessage = $reviewMessage; planDelivery = $planDelivery; reviewDelivery = $reviewDelivery; chartDelivery = $chartDelivery; chartError = $chartError }
     } catch {
         if($managed -and $managed.reminderIds){try{[void](Invoke-ControlReminder 'finish' @{reminderIds=@($managed.reminderIds);ok=$false;error=$_.Exception.Message})}catch{}}
         if (-not $DryRun -and $claim -and $claim.shouldSend) {

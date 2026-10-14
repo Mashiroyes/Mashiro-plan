@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "layouts": [
+    {
+      "id": "tencent-weixin-2.4.x-messaging-v1",
+      "versions": ["2.4.4", "2.4.8"],
+      "fastRoutinePath": "dist/src/messaging/fast-routine.js",
+      "processMessagePath": "dist/src/messaging/process-message.js",
+      "fastRoutineMarkers": ["handleFastRoutineCommand"],
+      "processMessageMarkers": ["./fast-routine.js", "fastRoutineResult"]
+    }
+  ]
+}

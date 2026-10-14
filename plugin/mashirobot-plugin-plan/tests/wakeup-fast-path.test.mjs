@@ -33,3 +33,17 @@ test("legacy wakeup cron cleanup remains available as an explicit maintenance ac
   assert.match(maintenance, /Remove-LegacyWakeupCronJobs/);
   assert.match(source, /'CleanupLegacyWakeup'\s*\{\s*Invoke-CleanupLegacyWakeup\s*\}/);
 });
+
+test("wakeup tasks retain a concrete repeating window", () => {
+  const setWakeup = functionBody("Invoke-SetWakeup", "Invoke-GetWakeup");
+  assert.match(setWakeup, /New-TimeSpan -Days 31/);
+  assert.match(setWakeup, /-RepetitionDuration \$repetitionDuration/);
+  assert.match(setWakeup, /durationDays=31/);
+});
+
+test("a failed Weixin delivery does not stop the wakeup recurrence", () => {
+  const runWakeup = functionBody("Invoke-RunWakeup");
+  const failurePath = runWakeup.slice(runWakeup.indexOf("ERROR sending Weixin reminder"));
+  assert.match(failurePath, /ok=\$true;recurring=\$true;error=\$_\.Exception\.Message/);
+  assert.doesNotMatch(failurePath, /ok=\$false/);
+});

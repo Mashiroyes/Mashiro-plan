@@ -1,5 +1,4 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createRotatingBackup } from "../control/backup-manager.mjs";
 import { collectCurrentTasks, formatCurrentTasks } from "../control/current-tasks.mjs";
 import { migrateControlDatabase } from "../control/database.mjs";
@@ -17,9 +16,9 @@ import { createPictureHelpService } from "../menu/help-service.mjs";
 import { createMenuSessionStore } from "../menu/menu-session.mjs";
 import { createPluginRouter } from "../router/plugin-router.mjs";
 import { createClock } from "../time/clock.mjs";
+import { resolvePlanRoot } from "./plan-root.mjs";
 
-const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
-const defaultPlanRoot = path.resolve(moduleDirectory, "..", "..");
+const defaultPlanRoot = resolvePlanRoot();
 
 function shortError(error) {
   return String(error instanceof Error ? error.message : error).replace(/\s+/gu, " ").trim().slice(0, 300);

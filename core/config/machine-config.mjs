@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+export { runtimeDescriptorPath } from "../deployment/runtime-descriptor.mjs";
 
 export function machineConfigPath(env = process.env) {
   const base = env.LOCALAPPDATA;

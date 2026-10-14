@@ -51,6 +51,19 @@ test("dispatch merges due low-priority reminders without claiming unrelated high
   assert.equal(manager.listCurrent().find((row) => row.id === high.id)?.status, "pending");
 });
 
+test("short reminder IDs are never reused after an earlier reminder is completed", (t) => {
+  const f = fixture(t);
+  const manager = createReminderManager({ sqlitePath: f.sqlitePath });
+  const completed = manager.register({ shortId: "R123", sourcePlugin: "test", kind: "statistics", priority: 1, content: "old" }).reminder;
+  manager.finishDelivery(completed.id, { ok: true });
+  const originalRandom = Math.random;
+  const values = [0.123, 0.124];
+  Math.random = () => values.shift() ?? 0.125;
+  t.after(() => { Math.random = originalRandom; });
+  const next = manager.register({ sourcePlugin: "test", kind: "statistics", priority: 1, content: "new" }).reminder;
+  assert.equal(next.shortId, "R124");
+});
+
 test("operation journal, migrations, health check, and rotating backup share one database", (t) => {
   const f = fixture(t);
   const journal = createOperationJournal(f.sqlitePath);

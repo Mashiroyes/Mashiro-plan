@@ -1,5 +1,19 @@
 # 新电脑部署指南
 
+## 推荐的20分钟流程（不含下载和可选QQ计时）
+
+1. **0—3分钟：预检。** 明确右键打开“以管理员身份运行”的 PowerShell 7，再运行 `core\config\install-new-computer.ps1 -Action Preflight -ProvisionPythonRuntime`。该开关只在 `%LOCALAPPDATA%\MashiroBot\runtime` 创建隔离的Python 3.12环境并安装固定版本Pillow，不替换系统Python。当前用户、`SYSTEM` 和桌面交互用户必须全部通过；非管理员窗口会在注册任何任务前给出明确错误，其他失败也先处理报告中的具体路径，不进入安装。
+2. **3—8分钟：配置与备份。** 用新电脑的微信目标初始化 `machine.json`，确认 `runtime.json` 中的 PowerShell、Node、Python、OpenClaw、数据库和腾讯微信插件路径，再由安装器保存数据库与配置备份。
+3. **8—12分钟：安装。** 如果预检前已经生成有效 `machine.json`，运行 `-Action Install -Profile Standard -RunId <预检RunId> -Resume`；安装器会复用已有微信目标。只有首次配置时才传 `-WeixinTarget <新目标>`。中断后继续使用相同 `-RunId` 和 `-Resume`，只重跑第一个未通过阶段。
+4. **12—18分钟：验证。** 完成静态和运行时检查后，在微信中实际发送 `帮助`、`状态`、`查询今日计划`；三条都要在 Gateway 日志中对应到本地路由，端口正常不能代替这一步。
+5. **18—20分钟：交接。** 运行 `core\deployment\accept-new-computer.ps1` 保存 `acceptance.json`。跳过QQ完整生命周期时保留为“未核验”，不能写成通过。
+
+排查顺序固定为：消息是否到达 → 本地路由是否匹配 → 子进程的实际路径、退出码和标准错误 → 用同一计划任务身份复现 → 扫描同类问题 → 只重启一次 Gateway → 重复验收。
+
+部署报告位于 `%LOCALAPPDATA%\MashiroBot\deployments\<RunId>\`，不会保存微信消息正文、令牌或完整微信目标。
+
+真实微信验收证据使用 JSON 数组，每项只记录 `command`、`routeId`、`replyClass`、`timestamp`、`gatewayLogMatched`，不保存消息正文。发送三条指令前记下时间，发送完成后运行 `core\deployment\collect-weixin-evidence.ps1 -Since <开始时间> -OutputPath <证据文件>`，它会关联本地路由日志与 Gateway 投递日志。再运行验收脚本并传入 `-ConfirmedCommands 帮助,状态,查询今日计划 -WeixinEvidencePath <证据文件>`；只有人工确认和两侧日志证据同时存在时才算通过。
+
 本项目按 Windows 11 x64 编写，只支持 Windows。以下版本是当前旧电脑已实际运行的版本，不代表理论最低版本：
 
 | 环境 | 当前验证版本 | 用途 | 是否必需 |
@@ -7,7 +21,7 @@
 | Git for Windows | 2.54.0 | 克隆和更新仓库 | 必需 |
 | PowerShell 7 | 7.6.6 | Windows worker、安装器、计划任务和健康检查 | 必需 |
 | Node.js | 26.5.1 | 插件路由、测试和 `node:sqlite` 数据访问 | 必需；必须包含 `node:sqlite` |
-| Python 64 位 | 3.14.6 | 计划数据库、图表和状态图片 | 必需 |
+| Python 64 位 | 3.11—3.13（当前部署白名单） | 计划数据库、图表和状态图片；必须通过 sqlite3 与 Pillow 预检 | 必需 |
 | Pillow | 12.1.1 | Python 图片渲染 | 必需 |
 | OpenClaw | 以 `openclaw` 命令可用为准 | 微信收发、Gateway 和定时消息 | 必需 |
 | .NET 8 SDK/Desktop Runtime | SDK 8.0.423 | 构建并运行使用审计 worker | 使用“使用审计”时必需 |

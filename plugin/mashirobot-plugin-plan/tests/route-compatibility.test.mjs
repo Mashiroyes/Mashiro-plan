@@ -46,7 +46,11 @@ const OLD_FAST_ROUTINE = path.join(
 function hasIndependentLegacyRouter() {
   if (!existsSync(OLD_FAST_ROUTINE)) return false;
   const source = readFileSync(OLD_FAST_ROUTINE, "utf8");
-  return !source.includes("handleMashiroBotMessage as handleFastRoutineCommand");
+  return !(
+    source.includes("MASHIROBOT_PLAN_ROOT") &&
+    source.includes("handleMashiroBotMessage") &&
+    source.includes("handleFastRoutineCommand")
+  );
 }
 
 function payloadBase64(value) {
@@ -530,6 +534,7 @@ test("uses explicit plan and wakeup dates before relative defaults", () => {
   assert.equal(parsePlanDate(combined, now), "2026-08-03");
   assert.equal(parseWakeRequest("8月5日9点提醒我起床", now).startAt, "2026-08-05T09:00:00+08:00");
   assert.equal(parseWakeRequest("明天9点提醒我起床", now).startAt, "2026-08-05T09:00:00+08:00");
+  assert.equal(parseWakeRequest("23点提醒我起床", now).startAt, "2026-08-04T23:00:00+08:00");
   assert.equal(parseWakeRequest("今天23点提醒我起床", now).startAt, "2026-08-04T23:00:00+08:00");
   assert.equal(
     parseWakeRequest("8月4日9点提醒我起床", new Date("2026-08-04T02:16:00+08:00")).startAt,

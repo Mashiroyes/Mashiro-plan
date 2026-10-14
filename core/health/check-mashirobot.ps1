@@ -2,6 +2,8 @@
 param(
     [Parameter(ParameterSetName = 'Health')][switch]$PreCleanup,
     [Parameter(ParameterSetName = 'Health')][switch]$PreStart,
+    [Parameter(ParameterSetName = 'Health')][switch]$Static,
+    [Parameter(ParameterSetName = 'Health')][switch]$Runtime,
     [Parameter(ParameterSetName = 'Fixture', Mandatory = $true)][switch]$RewriteFixture,
     [Parameter(ParameterSetName = 'Fixture', Mandatory = $true)][string]$FixturePath,
     [Parameter(ParameterSetName = 'Fixture', Mandatory = $true)][string]$FixtureOutput
@@ -311,30 +313,25 @@ console.log(JSON.stringify({ loaded: registry.plugins.map((entry) => entry.manif
     }
     Add-HealthCheck 'gateway-task' $GatewayOk $GatewayDetail 'registered'
 
-    $QqTaskName = 'MashiroBot-QQSession-Reconcile'
-    $QqTask = Get-ScheduledTask -TaskName $QqTaskName -ErrorAction SilentlyContinue
-    $QqStatusPath = Join-Path $env:ProgramData 'MashiroBot\mashirobot-plugin-game-timer\qq\last-status.json'
-    $QqHeartbeatOk = $false
-    $QqHeartbeatDetail = [ordered]@{
-        task = $QqTaskName
-        registered = ($null -ne $QqTask)
-        statusPath = $QqStatusPath
-        status = $null
-        ageSeconds = $null
+    # QQ reconciliation is an independent worker. Its heartbeat is useful for
+    # normal/runtime diagnostics, but it must not prevent the message gateway
+    # from starting (otherwise unrelated QQ failures silence every command).
+    if (-not $Static -and -not $PreStart) {
+        $QqTaskName = 'MashiroBot-QQSession-Reconcile'
+        $QqTask = Get-ScheduledTask -TaskName $QqTaskName -ErrorAction SilentlyContinue
+        $QqStatusPath = Join-Path $env:ProgramData 'MashiroBot\mashirobot-plugin-game-timer\qq\last-status.json'
+        $QqHeartbeatOk = $false
+        $QqHeartbeatDetail = [ordered]@{ task=$QqTaskName;registered=($null-ne$QqTask);statusPath=$QqStatusPath;status=$null;ageSeconds=$null }
+        if ($QqTask -and (Test-Path -LiteralPath $QqStatusPath -PathType Leaf)) {
+            try {$QqStatus=Get-Content -LiteralPath $QqStatusPath -Raw -Encoding utf8|ConvertFrom-Json;$QqAge=[DateTimeOffset]::UtcNow-[DateTimeOffset](Get-Item -LiteralPath $QqStatusPath).LastWriteTimeUtc;$QqHeartbeatDetail.status=$QqStatus;$QqHeartbeatDetail.ageSeconds=[Math]::Round($QqAge.TotalSeconds,3);$QqHeartbeatOk=($QqAge.TotalMinutes-le 12-and$QqStatus.ok)}catch{$QqHeartbeatDetail.status=$_.Exception.Message}
+        }
+        Add-HealthCheck 'qq-session-heartbeat' $QqHeartbeatOk $QqHeartbeatDetail 'heartbeat'
     }
-    if ($QqTask -and (Test-Path -LiteralPath $QqStatusPath -PathType Leaf)) {
-        try {
-            $QqStatus = Get-Content -LiteralPath $QqStatusPath -Raw -Encoding utf8 | ConvertFrom-Json
-            $QqAge = [DateTimeOffset]::UtcNow - [DateTimeOffset](Get-Item -LiteralPath $QqStatusPath).LastWriteTimeUtc
-            $QqHeartbeatDetail.status = $QqStatus
-            $QqHeartbeatDetail.ageSeconds = [Math]::Round($QqAge.TotalSeconds, 3)
-            $QqHeartbeatOk = ($QqAge.TotalMinutes -le 12 -and $QqStatus.ok)
-        } catch { $QqHeartbeatDetail.status = $_.Exception.Message }
-    }
-    Add-HealthCheck 'qq-session-heartbeat' $QqHeartbeatOk $QqHeartbeatDetail 'heartbeat'
 
     $CronOldReferences = [Collections.Generic.List[object]]::new()
-    if ($PreStart) {
+    if ($Static) {
+        # Static mode intentionally omits online OpenClaw cron inspection.
+    } elseif ($PreStart) {
         # The gateway is intentionally offline while the startup wrapper runs.
         # Online cron verification belongs to PreCleanup/normal health checks;
         # requiring it here would prevent the gateway from ever starting.
@@ -378,7 +375,7 @@ console.log(JSON.stringify({ loaded: registry.plugins.map((entry) => entry.manif
 
     $HelpOk = $false
     $HelpDetail = 'python unavailable'
-    if ($Python) {
+    if ($Python -and -not $Static) {
         $HelpRoot = Join-Path ([IO.Path]::GetTempPath()) ('MashiroBot\health-' + [guid]::NewGuid().ToString('N'))
         $HelpOutput = Join-Path $HelpRoot 'help.png'
         try {
@@ -402,11 +399,11 @@ console.log(JSON.stringify({ loaded: registry.plugins.map((entry) => entry.manif
             if (Test-Path -LiteralPath $HelpRoot) { Remove-Item -LiteralPath $HelpRoot -Recurse -Force }
         }
     }
-    Add-HealthCheck 'temporary-help-render' $HelpOk $HelpDetail 'verified'
+    if (-not $Static) { Add-HealthCheck 'temporary-help-render' $HelpOk $HelpDetail 'verified' }
 
     $Result = [ordered]@{
         ok = ($Failures.Count -eq 0)
-        mode = if ($PreStart) { 'PreStart' } elseif ($PreCleanup) { 'PreCleanup' } else { 'Health' }
+        mode = if ($PreStart) { 'PreStart' } elseif ($PreCleanup) { 'PreCleanup' } elseif ($Static) { 'Static' } elseif ($Runtime) { 'Runtime' } else { 'Health' }
         failures = @($Failures)
         checks = @($Checks)
     }

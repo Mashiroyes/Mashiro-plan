@@ -3,6 +3,7 @@ param(
     [ValidateSet('Reapply','Scan','Remove','Status')][string]$Mode = 'Status',
     [Parameter(Mandatory = $false)][string]$SqlitePath,
     [string]$StateRoot = (Join-Path $env:ProgramData 'MashiroBot\mashirobot-plugin-block'),
+    [string]$NodePath = 'node',
     [switch]$DryRun
 )
 
@@ -15,10 +16,12 @@ $MarkerEnd = '# END MASHIROBOT BLOCK'
 $StatePath = Join-Path $StateRoot 'state.json'
 $QuarantineRoot = Join-Path $StateRoot 'quarantine'
 $DbHelper = Join-Path $PSScriptRoot 'block-db-v1.mjs'
-$Node = (Get-Command node.exe -ErrorAction Stop).Source
+$Node = $NodePath
 $WorkerMutexName = 'Global\MashiroBot.PluginBlock.Worker'
 $ClashReloadBudgetMs = 12000
 $ClashReloadRetryDelayMs = 500
+$ClashRestartBudgetMs = 10000
+$TimeoutReadingPrompt = Join-Path $env:ProgramData 'CodexFocusLock\TimeoutReadingPrompt.ps1'
 
 function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -72,6 +75,18 @@ function Save-JsonAtomic([string]$path, $value, [int]$depth = 8) {
         Move-Item -LiteralPath $temporary -Destination $path -Force
     } finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+function Submit-BilibiliTimeoutPrompts($expiryResult, $layers) {
+    if ($DryRun) { return }
+    $expired = @($expiryResult.expiredReleases | Where-Object { [string]$_.target_key -eq 'bilibili.com' })
+    if (-not $expired.Count) { return }
+    if (-not $layers.hosts.ok -or -not $layers.browserPolicy.ok) { throw 'Bilibili timeout prompt requires verified hosts and browser-policy blocking.' }
+    if (-not (Test-Path -LiteralPath $TimeoutReadingPrompt -PathType Leaf)) { throw 'Timeout reading prompt helper is missing.' }
+    foreach ($release in $expired) {
+        $key = 'bilibili:{0}' -f [string]$release.expires_at
+        & $TimeoutReadingPrompt -Mode Submit -EventKey $key | Out-Null
     }
 }
 
@@ -191,19 +206,25 @@ function Set-HostsRules($domains, $releasedDomains) {
     return Write-Text $path (($clean.TrimEnd() + "`r`n`r`n" + ($lines -join "`r`n") + "`r`n"))
 }
 
-function Remove-ReleasedClashRules([string]$raw, $releasedDomains) {
+function Remove-ClashDomainRules([string]$raw, $domains) {
     $result = $raw
-    foreach ($domain in @($releasedDomains)) {
+    foreach ($domain in @($domains)) {
         $escaped = [regex]::Escape(([string]$domain).Trim().TrimEnd('.'))
-        $pattern = "(?im)^[ \t]*-[ \t]*DOMAIN(?:-SUFFIX)?[ \t]*,[ \t]*$escaped[ \t]*,[ \t]*REJECT[ \t]*(?:\r?\n)?"
+        $pattern = "(?im)^[ \t]*-[ \t]*DOMAIN(?:-SUFFIX)?[ \t]*,[ \t]*$escaped[ \t]*,[ \t]*(?:REJECT|DIRECT)[ \t]*(?:\r?\n)?"
         $result = [regex]::Replace($result, $pattern, '')
     }
     return $result
 }
 
-function Test-ClashRuleExists([string]$raw, [string]$domain) {
-    $escaped = [regex]::Escape($domain.Trim().TrimEnd('.'))
-    return [regex]::IsMatch($raw, "(?im)^[ \t]*-[ \t]*DOMAIN(?:-SUFFIX)?[ \t]*,[ \t]*$escaped[ \t]*,[ \t]*REJECT[ \t]*$")
+function New-ManagedClashRules($domains, $releasedDomains) {
+    $released = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($domain in @($releasedDomains | Where-Object { $_ } | Sort-Object -Unique)) {
+        [void]$released.Add(([string]$domain).Trim().TrimEnd('.'))
+    }
+    $direct = @($released | Sort-Object | ForEach-Object { "DOMAIN-SUFFIX,$_,DIRECT" })
+    $reject = @($domains | Where-Object { $_ -and -not $released.Contains(([string]$_).Trim().TrimEnd('.')) } |
+        Sort-Object -Unique | ForEach-Object { "DOMAIN-SUFFIX,$_,REJECT" })
+    return @($direct) + @($reject)
 }
 
 function Add-YamlBlock([string]$raw, $rules) {
@@ -279,7 +300,7 @@ function Invoke-ClashHttpReload([string]$bodyJson, [int]$timeoutMs) {
         $response = $client.Send($request)
         $statusCode = [int]$response.StatusCode
         if ($statusCode -notin @(200,204)) { return [pscustomobject]@{ Ok=$false; Error="HTTP controller returned status $statusCode." } }
-        return [pscustomobject]@{ Ok=$true; Error=$null }
+        return [pscustomobject]@{ Ok=$true; Error=$null; Method='http' }
     } catch {
         return [pscustomobject]@{ Ok=$false; Error=$_.Exception.Message }
     } finally {
@@ -304,7 +325,7 @@ function Invoke-ClashPipeReload([byte[]]$bodyBytes, [byte[]]$headerBytes, [int]$
         if (-not $read.Wait($responseTimeoutMs)) { throw 'Clash reload response timed out.' }
         $response = [Text.Encoding]::UTF8.GetString($buffer,0,$read.Result)
         if ($response -notmatch '^HTTP/1\.1 (?:200|204)') { throw "Clash reload failed: $($response.Split("`r`n")[0])" }
-        return [pscustomobject]@{ Ok=$true; Error=$null }
+        return [pscustomobject]@{ Ok=$true; Error=$null; Method='named-pipe' }
     } catch {
         return [pscustomobject]@{ Ok=$false; Error=$_.Exception.Message }
     } finally { $pipe.Dispose() }
@@ -333,7 +354,29 @@ function Invoke-ClashReload([string]$configPath) {
         $remainingMs = [int]($ClashReloadBudgetMs - $timer.ElapsedMilliseconds)
         if ($remainingMs -gt 0) { Start-Sleep -Milliseconds ([Math]::Min($ClashReloadRetryDelayMs, $remainingMs)) }
     }
-    return [pscustomobject]@{ Ok=$false; Error="HTTP: $lastHttpError; pipe: $lastPipeError" }
+    $restartResult = Invoke-ClashProcessRestart -ConfigPath $configPath
+    if ($restartResult.Ok) { return $restartResult }
+    return [pscustomobject]@{ Ok=$false; Error="HTTP: $lastHttpError; pipe: $lastPipeError; restart: $($restartResult.Error)"; Method=$null }
+}
+
+function Invoke-ClashProcessRestart([string]$ConfigPath) {
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^(verge-mihomo|mihomo)(\.exe)?$' })
+    if (-not $processes.Count) { return [pscustomobject]@{ Ok=$false; Error='No running Mihomo process was found.'; Method=$null } }
+    $candidate = $processes | Where-Object { $_.ExecutablePath -and (Test-Path -LiteralPath $_.ExecutablePath -PathType Leaf) } | Select-Object -First 1
+    if (-not $candidate) { return [pscustomobject]@{ Ok=$false; Error='Mihomo executable path was unavailable.'; Method=$null } }
+    $oldProcessIds = @($processes.ProcessId)
+    try {
+        foreach ($process in $processes) { Stop-Process -Force -Id $process.ProcessId -ErrorAction Stop }
+        $arguments = if ($candidate.CommandLine -match '(?i)\s(-d\s+.+)$') { $Matches[1] } elseif ($ConfigPath) { '-f "{0}"' -f $ConfigPath } else { '' }
+        Start-Process -FilePath ([string]$candidate.ExecutablePath) -ArgumentList $arguments -WindowStyle Hidden | Out-Null
+        $deadline = [DateTimeOffset]::UtcNow.AddMilliseconds($ClashRestartBudgetMs)
+        do {
+            Start-Sleep -Milliseconds 250
+            $fresh = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $process=$_;if($process.Name -match '^(verge-mihomo|mihomo)$' -and $oldProcessIds -notcontains $process.Id){$process} })
+            if ($fresh.Count) { return [pscustomobject]@{ Ok=$true; Error=$null; Method='restart' } }
+        } while ([DateTimeOffset]::UtcNow -lt $deadline)
+        return [pscustomobject]@{ Ok=$false; Error='A fresh Mihomo process did not return before the restart deadline.'; Method=$null }
+    } catch { return [pscustomobject]@{ Ok=$false; Error=$_.Exception.Message; Method=$null } }
 }
 
 function Set-ClashRules($domains, $releasedDomains, $state) {
@@ -342,19 +385,18 @@ function Set-ClashRules($domains, $releasedDomains, $state) {
         @($releasedDomains) + @($previous | Where-Object { $domains -notcontains $_ }) |
         Where-Object { $_ } | Sort-Object -Unique
     )
+    $managedRules = @(New-ManagedClashRules $domains $releasedDomains)
     $changed = $false
     foreach ($path in @(Get-ClashPaths $state)) {
-        $raw = Remove-ReleasedClashRules (Remove-MarkedBlock ([IO.File]::ReadAllText($path))) $removeDomains
-        $missing = @($domains | Where-Object { -not (Test-ClashRuleExists $raw $_) })
-        $updated = if ($missing.Count) { Add-YamlBlock $raw @($missing | ForEach-Object { "DOMAIN-SUFFIX,$_,REJECT" }) } else { $raw }
+        $raw = Remove-ClashDomainRules (Remove-MarkedBlock ([IO.File]::ReadAllText($path))) $removeDomains
+        $updated = if ($managedRules.Count) { Add-YamlBlock $raw $managedRules } else { $raw }
         $changed = (Write-Text $path $updated) -or $changed
     }
     $generatedPaths = @(Get-ClashGeneratedPaths $state)
     if ($changed) {
         foreach ($path in $generatedPaths) {
-            $raw = Remove-ReleasedClashRules (Remove-MarkedBlock ([IO.File]::ReadAllText($path))) $removeDomains
-            $missing = @($domains | Where-Object { -not (Test-ClashRuleExists $raw $_) })
-            $updated = if ($missing.Count) { Add-YamlBlock $raw @($missing | ForEach-Object { "DOMAIN-SUFFIX,$_,REJECT" }) } else { $raw }
+            $raw = Remove-ClashDomainRules (Remove-MarkedBlock ([IO.File]::ReadAllText($path))) $removeDomains
+            $updated = if ($managedRules.Count) { Add-YamlBlock $raw $managedRules } else { $raw }
             [void](Write-Text $path $updated)
         }
     }
@@ -446,7 +488,7 @@ function Restore-ClashRules($state) {
     $managed = @($state.ClashManagedDomains)
     foreach ($path in @(@(Get-ClashPaths $state) + @(Get-ClashGeneratedPaths $state))) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
-        $raw = Remove-ReleasedClashRules (Remove-MarkedBlock ([IO.File]::ReadAllText($path))) $managed
+        $raw = Remove-ClashDomainRules (Remove-MarkedBlock ([IO.File]::ReadAllText($path))) $managed
         $changed = (Write-Text $path $raw) -or $changed
     }
     if ($changed) {
@@ -516,34 +558,40 @@ function Move-Installers($rows, $config, $state) {
 function Invoke-Reapply {
     Assert-Administrator
     $state = Read-State
-    [void](Invoke-Db 'expire')
+    $expiryResult = Invoke-Db 'expire'
     $rows = @(Invoke-Db 'active')
     $releasedRows = @(Invoke-Db 'released')
     $releasedDomains = @(Expand-ReleasedDomains @($releasedRows | ForEach-Object { [string]$_.target_key } | Sort-Object -Unique))
     $config = Get-SoftwareConfig
     $domains = @(New-DomainSet $rows $config)
     $pluginManagesBilibili = @($rows + $releasedRows | Where-Object { $_.target_key -eq 'bilibili.com' }).Count -gt 0 -or [bool]$state.LegacyBilibiliDelegated
-    Set-LegacyBilibiliDelegation $state $pluginManagesBilibili
-    Set-HostsRules $domains $releasedDomains | Out-Null
-    Set-ClashRules $domains $releasedDomains $state | Out-Null
-    Restore-BrowserPolicies $state
-    Remove-ReleasedBrowserPolicies $releasedDomains
-    Set-BrowserPolicies $domains $state
-    Restore-ImageBlocks $state
-    Set-ImageBlocks $rows $config $state
-    Stop-BlockedProcesses $rows $config
-    Move-Installers $rows $config $state
+    $layers = [ordered]@{}
+    $layerErrors = [Collections.Generic.List[string]]::new()
+    function Invoke-Layer([string]$Name,[bool]$Required,[scriptblock]$Operation) {
+        try { $evidence=@(& $Operation);$layers[$Name]=[ordered]@{ok=$true;required=$Required;evidence=@($evidence);error=$null;checkedAt=[DateTimeOffset]::UtcNow.ToString('o')} }
+        catch { $layers[$Name]=[ordered]@{ok=$false;required=$Required;evidence=@();error=$_.Exception.Message;checkedAt=[DateTimeOffset]::UtcNow.ToString('o')};if($Required){$layerErrors.Add("${Name}: $($_.Exception.Message)")} }
+    }
+    Invoke-Layer 'legacyDelegation' $true { Set-LegacyBilibiliDelegation $state $pluginManagesBilibili }
+    Invoke-Layer 'hosts' $true { Set-HostsRules $domains $releasedDomains }
+    Invoke-Layer 'clashPersistent' $false { Set-ClashRules $domains $releasedDomains $state }
+    $layers['clashReload']=[ordered]@{ok=(-not[bool]$state.ClashReloadPending);required=(@(Get-ClashPaths $state).Count-gt 0);evidence=@();error=if($state.ClashReloadPending){'Clash live reload remains pending.'}else{$null};checkedAt=[DateTimeOffset]::UtcNow.ToString('o')}
+    if($layers.clashReload.required-and-not$layers.clashReload.ok){$layerErrors.Add('clashReload: Clash live reload remains pending.')}
+    Invoke-Layer 'browserPolicy' $true { Restore-BrowserPolicies $state;Remove-ReleasedBrowserPolicies $releasedDomains;Set-BrowserPolicies $domains $state }
+    Invoke-Layer 'softwareAndImages' $true { Restore-ImageBlocks $state;Set-ImageBlocks $rows $config $state;Stop-BlockedProcesses $rows $config;Move-Installers $rows $config $state }
+    Submit-BilibiliTimeoutPrompts $expiryResult $layers
     $state | Add-Member -NotePropertyName LastSync -NotePropertyValue ([ordered]@{
-        ok = $true
+        ok = ($layerErrors.Count -eq 0)
         mode = $Mode
         completedAt = [DateTimeOffset]::UtcNow.ToString('o')
         ruleCount = $rows.Count
         domainCount = $domains.Count
         releasedDomainCount = $releasedDomains.Count
         error = $null
+        layers = $layers
     }) -Force
     Save-State $state
-    [ordered]@{ ok=$true; mode='Reapply'; ruleCount=$rows.Count; domainCount=$domains.Count; releasedDomainCount=$releasedDomains.Count; dryRun=[bool]$DryRun } | ConvertTo-Json -Compress
+    if($layerErrors.Count){throw($layerErrors-join'; ')}
+    [ordered]@{ ok=$true; mode='Reapply'; ruleCount=$rows.Count; domainCount=$domains.Count; releasedDomainCount=$releasedDomains.Count; layers=$layers; dryRun=[bool]$DryRun } | ConvertTo-Json -Depth 10 -Compress
 }
 
 function Invoke-Remove {
@@ -578,6 +626,7 @@ try {
     if ($Mode -in @('Reapply','Scan') -and -not $DryRun) {
         try {
             $failedState = Read-State
+            if($failedState.LastSync -and $failedState.LastSync.PSObject.Properties['layers']){throw}
             $failedState | Add-Member -NotePropertyName LastSync -NotePropertyValue ([ordered]@{
                 ok = $false
                 mode = $Mode

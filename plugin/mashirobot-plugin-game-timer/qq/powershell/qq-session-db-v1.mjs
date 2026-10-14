@@ -4,22 +4,11 @@ import path from "node:path";
 import { Buffer } from "node:buffer";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { cooldownMinutesForDailySession } from "../../core/qq-session-model.mjs";
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const versionedStorage = path.resolve(moduleDirectory, "../../core/qq-session-storage-v2.mjs");
 const canonicalStorage = path.resolve(moduleDirectory, "../../core/qq-session-storage.mjs");
 const { createQqSessionStore } = await import(pathToFileURL(fs.existsSync(versionedStorage) ? versionedStorage : canonicalStorage));
-
-function shanghaiDateBounds(value) {
-  const instant = new Date(value);
-  if (Number.isNaN(instant.getTime())) throw new Error("Invalid compensation window");
-  const fields = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(instant).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
-  const start = Date.UTC(Number(fields.year), Number(fields.month) - 1, Number(fields.day), -8);
-  return { start: new Date(start).toISOString(), end: new Date(start + 24 * 60 * 60_000).toISOString() };
-}
 
 function decode(value) {
   return JSON.parse(Buffer.from(String(value), "base64").toString("utf8"));
@@ -65,19 +54,34 @@ switch (command) {
   case "activate64":
     output(store.activateAfterInstall(payload.id, payload.confirmedAt ?? new Date(), payload.tasks ?? {}));
     break;
+  case "consume-sunday64":
+    output(store.consumeSundayAllowance(payload.id, payload.consumedAt ?? new Date()));
+    break;
   case "phase64":
     output(store.setPhase(payload.id, payload.phase, payload.event ?? null, payload.updatedAt));
     break;
+  case "resume64": {
+    const now = new Date(payload.updatedAt ?? new Date());
+    if (Number.isNaN(now.getTime())) throw new Error("Invalid resume time");
+    const changed = withDb(sqlitePath, (db) => db.prepare(`UPDATE qq_timed_sessions
+      SET phase='playing', updated_at=? WHERE id=? AND phase='cooldown' AND play_ends_at>?`).run(
+      now.toISOString(), payload.id, now.toISOString()));
+    if (Number(changed.changes) !== 1) throw new Error("QQ session is not eligible for resume");
+    store.appendEvent(payload.id, { action: "premature_close_resumed", result: "ok" }, now.toISOString());
+    output(store.get(payload.id));
+    break;
+  }
   case "compensate64":
     output(withDb(sqlitePath, (db) => {
       const now = new Date(payload.confirmedAt);
       const minutes = Number(payload.minutes);
       if (Number.isNaN(now.getTime()) || !Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) throw new Error("Invalid compensation window");
+      const current = db.prepare("SELECT play_ends_at,cooldown_ends_at FROM qq_timed_sessions WHERE id=? AND phase='playing'").get(payload.id);
+      if (!current) throw new Error("Playing session was not found for compensation");
+      const cooldownMs = new Date(current.cooldown_ends_at).getTime() - new Date(current.play_ends_at).getTime();
+      if (!Number.isFinite(cooldownMs) || cooldownMs < 0) throw new Error("Playing session has an invalid cooldown window");
       const playEndsAt = new Date(now.getTime() + minutes * 60_000).toISOString();
-      const day = shanghaiDateBounds(now);
-      const priorCount = Number(db.prepare(`SELECT COUNT(*) AS count FROM qq_timed_sessions
-        WHERE id <> ? AND confirmed_at IS NOT NULL AND phase <> 'failed' AND confirmed_at >= ? AND confirmed_at < ?`).get(payload.id, day.start, day.end).count);
-      const cooldownEndsAt = new Date(new Date(playEndsAt).getTime() + cooldownMinutesForDailySession(priorCount + 1) * 60_000).toISOString();
+      const cooldownEndsAt = new Date(new Date(playEndsAt).getTime() + cooldownMs).toISOString();
       const result = db.prepare(`UPDATE qq_timed_sessions SET confirmed_at=?,play_ends_at=?,cooldown_ends_at=?,updated_at=? WHERE id=? AND phase='playing'`).run(
         now.toISOString(), playEndsAt, cooldownEndsAt, now.toISOString(), payload.id);
       if (Number(result.changes) !== 1) throw new Error("Playing session was not found for compensation");
@@ -126,6 +130,14 @@ switch (command) {
     `).run(payload.state, payload.error ?? null, payload.updatedAt ?? new Date().toISOString(), payload.id)));
     break;
   case "installed-vault-active":
+    output((() => {
+      const record = store.getInstalledExecutableVault();
+      if (!record) return null;
+      const { vaultPath: _vaultPath, originalPath: _originalPath, ...publicRecord } = record;
+      return publicRecord;
+    })());
+    break;
+  case "installed-vault-active-internal":
     output(store.getInstalledExecutableVault());
     break;
   case "installed-vault-upsert64":

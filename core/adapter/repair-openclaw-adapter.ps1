@@ -10,10 +10,31 @@ Set-StrictMode -Version Latest
 
 $AdapterRoot = $PSScriptRoot
 $CanonicalAdapterPath = Join-Path $AdapterRoot 'fast-routine.adapter.js'
+$LayoutRegistryPath = Join-Path $AdapterRoot 'openclaw-layouts.json'
 $PlanRoot = Split-Path -Parent (Split-Path -Parent $AdapterRoot)
 $IndexPath = Join-Path $PlanRoot 'core\index.mjs'
 $FastRelativePath = 'dist\src\messaging\fast-routine.js'
 $ProcessRelativePath = 'dist\src\messaging\process-message.js'
+
+function Resolve-OpenClawLayout {
+    param([string]$Root)
+    if (-not (Test-Path -LiteralPath $LayoutRegistryPath -PathType Leaf)) { throw "OpenClaw layout registry is missing: $LayoutRegistryPath" }
+    $PackageJsonPath = Join-Path $Root 'package.json'
+    if (-not (Test-Path -LiteralPath $PackageJsonPath -PathType Leaf)) { throw "Tencent Weixin package.json is missing: $PackageJsonPath" }
+    $Package = Get-Content -LiteralPath $PackageJsonPath -Raw -Encoding utf8 | ConvertFrom-Json
+    $Registry = Get-Content -LiteralPath $LayoutRegistryPath -Raw -Encoding utf8 | ConvertFrom-Json
+    $Matches = @($Registry.layouts | Where-Object { @($_.versions) -contains [string]$Package.version })
+    if ($Matches.Count -ne 1) { throw "Unsupported Tencent Weixin package version/layout: version=$($Package.version), matches=$($Matches.Count). No files were changed." }
+    $Layout = $Matches[0]
+    $Fast = Join-Path $Root ([string]$Layout.fastRoutinePath -replace '/', '\')
+    $Process = Join-Path $Root ([string]$Layout.processMessagePath -replace '/', '\')
+    foreach ($Path in @($Fast,$Process)) { if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Recognized layout $($Layout.id) is missing: $Path" } }
+    $FastText = Get-Content -LiteralPath $Fast -Raw -Encoding utf8
+    $ProcessText = Get-Content -LiteralPath $Process -Raw -Encoding utf8
+    foreach ($Marker in @($Layout.fastRoutineMarkers)) { if (-not $FastText.Contains([string]$Marker)) { throw "Recognized layout $($Layout.id) failed fast-routine marker: $Marker" } }
+    foreach ($Marker in @($Layout.processMessageMarkers)) { if (-not $ProcessText.Contains([string]$Marker)) { throw "Recognized layout $($Layout.id) failed process-message marker: $Marker" } }
+    return [pscustomobject]@{ Id=[string]$Layout.id; Version=[string]$Package.version; FastPath=$Fast; ProcessPath=$Process }
+}
 
 function Resolve-OpenClawPackageRoot {
     param([string]$ExplicitRoot)
@@ -117,8 +138,9 @@ try {
     }
 
     $ResolvedPackageRoot = Resolve-OpenClawPackageRoot -ExplicitRoot $PackageRoot
-    $FastPath = Join-Path $ResolvedPackageRoot $FastRelativePath
-    $ProcessPath = Join-Path $ResolvedPackageRoot $ProcessRelativePath
+    $Layout = Resolve-OpenClawLayout -Root $ResolvedPackageRoot
+    $FastPath = $Layout.FastPath
+    $ProcessPath = $Layout.ProcessPath
     foreach ($Path in @($FastPath, $ProcessPath)) {
         if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
             throw "Required OpenClaw entry is missing: $Path"
@@ -128,8 +150,9 @@ try {
     if (-not (Test-Path -LiteralPath $IndexPath -PathType Leaf)) { throw "MashiroBot entry is missing: $IndexPath" }
     $IndexUri = ([Uri]([IO.Path]::GetFullPath($IndexPath))).AbsoluteUri
     $CanonicalTemplate = Get-Content -LiteralPath $CanonicalAdapterPath -Raw -Encoding utf8
-    if ($CanonicalTemplate -notmatch '__MASHIROBOT_INDEX_URI__') { throw 'Canonical adapter template is missing its index URI placeholder.' }
-    $CanonicalText = $CanonicalTemplate.Replace('__MASHIROBOT_INDEX_URI__', $IndexUri)
+    if ($CanonicalTemplate -notmatch '__MASHIROBOT_INDEX_URI__' -or $CanonicalTemplate -notmatch '__MASHIROBOT_PLAN_ROOT__') { throw 'Canonical adapter template is missing an index URI or Plan root placeholder.' }
+    $EscapedPlanRoot = ([IO.Path]::GetFullPath($PlanRoot)).Replace('\','\\').Replace('"','\"')
+    $CanonicalText = $CanonicalTemplate.Replace('__MASHIROBOT_INDEX_URI__', $IndexUri).Replace('__MASHIROBOT_PLAN_ROOT__', $EscapedPlanRoot)
     $FastText = Get-Content -LiteralPath $FastPath -Raw -Encoding utf8
     $ProcessText = Get-Content -LiteralPath $ProcessPath -Raw -Encoding utf8
     $FastState = Get-FastAdapterState -Text $FastText -CanonicalText $CanonicalText
@@ -141,13 +164,14 @@ try {
 
     if ($WhatIfReport) {
         Write-Output "PackageRoot: $ResolvedPackageRoot"
+        Write-Output "PackageVersion: $($Layout.Version) | layout=$($Layout.Id)"
         Write-Output "Target: $FastPath | state=$FastState | action=$(if ($NeedsFastWrite) { 'replace full file with canonical adapter' } else { 'no change' })"
         Write-Output "Target: $ProcessPath | state=$($ProcessState.State) | action=$(if ($NeedsProcessWrite) { 'replace fast-handler call only' } else { 'no change' })"
         exit 0
     }
 
     if (-not $NeedsFastWrite -and -not $NeedsProcessWrite) {
-        Write-Output "MashiroBot OpenClaw adapter is already canonical: $ResolvedPackageRoot"
+        Write-Output "MashiroBot OpenClaw adapter is already canonical: $ResolvedPackageRoot | version=$($Layout.Version) | layout=$($Layout.Id)"
         exit 0
     }
 
@@ -174,6 +198,7 @@ try {
     }
 
     Write-Output "MashiroBot OpenClaw adapter repaired: $ResolvedPackageRoot"
+    Write-Output "PackageVersion: $($Layout.Version) | layout=$($Layout.Id)"
     Write-Output "Backup: $FastBackup"
     Write-Output "Backup: $ProcessBackup"
     exit 0

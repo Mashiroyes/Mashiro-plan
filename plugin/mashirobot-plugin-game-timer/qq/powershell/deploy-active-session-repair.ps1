@@ -1,6 +1,6 @@
 [CmdletBinding()]param()
 $ErrorActionPreference='Stop'
-$focusSource=(Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..\..\focus-lock\FocusLock.ps1')).Path
+$focusSource=(Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..\focus-lock\FocusLock.ps1')).Path
 $focusTarget=Join-Path $env:ProgramData 'CodexFocusLock\FocusLock.ps1'
 $backupRoot=Join-Path $env:ProgramData ('MashiroBot\migration-backups\qq-ifeo-repair-'+(Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $backupRoot -Force|Out-Null

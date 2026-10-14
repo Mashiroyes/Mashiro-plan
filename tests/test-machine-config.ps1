@@ -14,6 +14,8 @@ try {
     $missing = $false
     try { Read-MashiroMachineConfig -Path (Join-Path $root 'missing.json') | Out-Null } catch { $missing = $_.Exception.Message -match 'initialize-machine-config' }
     if (-not $missing) { throw 'Missing configuration did not produce an actionable error.' }
+    $runtimePath = Resolve-MashiroRuntimeDescriptorPath
+    if ($runtimePath -notmatch 'MashiroBot\\config\\runtime\.json$') { throw 'Runtime descriptor path was not resolved below LOCALAPPDATA.' }
     [ordered]@{ ok=$true; configPath=$configPath } | ConvertTo-Json -Compress
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

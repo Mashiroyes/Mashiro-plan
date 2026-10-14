@@ -34,6 +34,14 @@ function boundedStatus(status) {
   return JSON.stringify(summary).slice(0, 1_000);
 }
 
+function cacheCanAnswerPreflight(worker) {
+  if (!worker || worker.ok === false) return false;
+  const authorizedPlaying = worker.phase === "playing" && worker.authorizationActive === true;
+  return worker.websiteBlockActive === true
+    && worker.executableReady === true
+    && (authorizedPlaying || worker.clientBarrierActive === true);
+}
+
 export function createQqSessionScheduler({
   pluginRoot,
   sqlitePath,
@@ -79,7 +87,9 @@ export function createQqSessionScheduler({
       args,
       timeoutMs: Math.max(30_000, timeoutMs),
       output: "json",
-      jsonMode: "last-line",
+      // install-qq-session.ps1 emits formatted JSON. Parsing only its last
+      // line would try to parse a lone closing brace and reject valid output.
+      jsonMode: "document",
       maxStdoutBytes: 2 * 1024 * 1024,
       maxStderrBytes: 128 * 1024,
       signal,
@@ -91,7 +101,9 @@ export function createQqSessionScheduler({
     status({ signal } = {}) { return invoke("Status", null, signal); },
     async preflight({ signal } = {}) {
       const cached = await cachedStatus({ freshOnly: true });
-      const status = cached ? { ok: cached.ok !== false, status: cached, source: "cache" } : await invoke("Status", null, signal);
+      const status = cacheCanAnswerPreflight(cached)
+        ? { ok: true, status: cached, source: "cache" }
+        : await invoke("Status", null, signal);
       const worker = status.status;
       const errors = [];
       if (!status.ok) errors.push("QQ限时执行器未安装或状态异常");
@@ -110,7 +122,18 @@ export function createQqSessionScheduler({
         const worker = await cachedStatus({ notBeforeMs: beganAt });
         if (worker?.sessionId === session.id && worker?.ok === false) throw new Error(worker.error ?? "QQ启动失败");
         if (worker?.sessionId === session.id && worker?.phase === "playing" && worker?.authorizationActive === true && worker?.qqInstalled === true && worker?.interactiveProcessActive === true) {
-          return { session: worker.session, status: worker };
+          return {
+            session: worker.session,
+            status: worker,
+            launch: {
+              ok: true,
+              processActive: true,
+              executablePaths: worker.qqExecutablePaths ?? [],
+              confirmedAt: worker.session?.confirmedAt ?? null,
+            },
+            audit: { ok: true, warning: null },
+            rollback: { attempted: false, ok: null },
+          };
         }
         if (worker) last = worker;
         await delay(Math.min(pollIntervalMs, Math.max(0, deadline - monotonicNow())), signal);

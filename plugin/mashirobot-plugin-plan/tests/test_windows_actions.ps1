@@ -47,6 +47,9 @@ try {
     Assert-True ($allSource.Contains('set-plugin-state')) 'SQLite plugin state write command is missing.'
     Assert-True (-not $allSource.Contains('OPENCLAW_ROUTINE_STATE_PATH')) 'Routine JSON state override survived migration.'
     Assert-True (-not $allSource.Contains('OPENCLAW_WAKEUP_STATE_PATH')) 'Wakeup JSON state override survived migration.'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $windowsRoot 'windows-notification.ps1'))) 'Windows notification helper still exists.'
+    Assert-True (-not $allSource.Contains('Show-MashiroWindowsNotification')) 'A Windows text notification call still exists.'
+    Assert-True (-not $allSource.Contains('Show-MashiroWindowsChart')) 'A Windows chart notification call still exists.'
 
     Invoke-Entry @('-Action','SendHabit') $true | Out-Null
     Invoke-Entry @('-Action','SetWakeup') $true | Out-Null
@@ -93,6 +96,7 @@ try {
     Assert-True ([bool]$wake.WakeToRun) 'SetWakeup DryRun lost WakeToRun.'
     Assert-True ([bool]$wake.StartWhenAvailable) 'SetWakeup DryRun lost StartWhenAvailable.'
     Assert-True ($wake.IntervalMinutes -eq 10) 'Wakeup repetition changed.'
+    Assert-True ($wake.RepetitionDurationDays -eq 31) 'Wakeup repetition duration changed.'
     Assert-True ([string]$wake.Action -match '\\plan\\plugin\\mashirobot-plugin-plan\\windows\\routine-reminder\.ps1') 'Wakeup task uses the wrong root.'
 
     $general = (Invoke-Entry @('-Action','SetGeneralReminder','-StartAt',$future,'-Message','测试会议','-DryRun')) | ConvertFrom-Json

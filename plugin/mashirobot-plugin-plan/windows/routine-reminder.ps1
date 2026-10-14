@@ -271,7 +271,11 @@ function Invoke-SetWakeup {
     $newJobId='wakeup:'+$newTaskName
     $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action RunWakeup -TaskName "{1}" -OperationId "{2}" -JobId "{3}" -JobVersion 1' -f $PSCommandPath, $newTaskName, $OperationId, $newJobId
     $taskAction = New-ScheduledTaskAction -Execute $pwshPath -Argument $arguments
-    $trigger = New-ScheduledTaskTrigger -Once -At $start.LocalDateTime -RepetitionInterval (New-TimeSpan -Minutes 10)
+    # Windows does not keep a repetition schedule active when its duration is
+    # omitted. Keep the wakeup task repeatable long enough for an unanswered
+    # alarm, while `已起床` remains the normal cancellation path.
+    $repetitionDuration = New-TimeSpan -Days 31
+    $trigger = New-ScheduledTaskTrigger -Once -At $start.LocalDateTime -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration $repetitionDuration
     $settings = New-ScheduledTaskSettingsSet `
         -WakeToRun `
         -StartWhenAvailable `
@@ -293,6 +297,7 @@ function Invoke-SetWakeup {
             TaskName = $newTaskName
             StartAt = $start.ToString('o')
             IntervalMinutes = 10
+            RepetitionDurationDays = 31
             WakeToRun = [bool]$definition.Settings.WakeToRun
             StartWhenAvailable = [bool]$definition.Settings.StartWhenAvailable
             Action = $arguments
@@ -306,7 +311,7 @@ function Invoke-SetWakeup {
 
     $oldState = Read-WakeupState
     $oldTaskName = if ($oldState -and $oldState.ContainsKey('windowsTaskName')) { [string]$oldState.windowsTaskName } else { '' }
-    Invoke-ControlJob -Action 'upsert' -Payload @{jobId=$newJobId;version=1;owner='mashirobot-plugin-plan';kind='wakeup';taskName=$newTaskName;runAt=$start.ToString('o');recurrence=@{intervalMinutes=10};payload=@{execution=@{executable=$pwshPath;arguments=$arguments}}}|Out-Null
+    Invoke-ControlJob -Action 'upsert' -Payload @{jobId=$newJobId;version=1;owner='mashirobot-plugin-plan';kind='wakeup';taskName=$newTaskName;runAt=$start.ToString('o');recurrence=@{intervalMinutes=10;durationDays=31};payload=@{execution=@{executable=$pwshPath;arguments=$arguments}}}|Out-Null
     Register-ScheduledTask -TaskName $newTaskName -InputObject $definition -Force | Out-Null
     try {
         $state = @{
@@ -475,7 +480,10 @@ function Invoke-RunWakeup {
         }
     } catch {
         Write-WakeupLog ('ERROR sending Weixin reminder: {0}' -f $_.Exception.Message)
-        if($JobId){try{Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$false;error=$_.Exception.Message}|Out-Null}catch{}}
+        # A failed delivery must not consume the wakeup job.  The scheduled
+        # task still needs to retry playback and delivery every ten minutes
+        # until the user explicitly replies "已起床".
+        if($JobId){try{Invoke-ControlJob -Action 'complete' -Payload @{jobId=$JobId;version=$JobVersion;ok=$true;recurring=$true;error=$_.Exception.Message}|Out-Null}catch{}}
         $latest = Read-WakeupState
         if ($latest -and [bool]$latest.active -and [string]$latest.windowsTaskName -eq $TaskName) {
             $latest.lastError = $_.Exception.Message; $latest.updatedAt = $now.ToString('o'); Write-WakeupState -State $latest

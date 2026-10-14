@@ -38,6 +38,58 @@ test("matches all statistic aliases", () => {
   }
 });
 
+test("records a TED-Ed listening video and schedules expanding reviews", async () => {
+  let saved = null;
+  const runtime = fixtureRuntime({
+    async runPlanner(args) {
+      if (args[0] === "get-plugin-state") return { found: false, value: null };
+      if (args[0] === "set-plugin-state") {
+        saved = JSON.parse(Buffer.from(args[args.indexOf("--payload-base64") + 1], "base64").toString("utf8"));
+        return { value: saved };
+      }
+      throw new Error("unexpected command");
+    },
+  });
+  const phrase = "今日英语听力：12  What staying up all night does to your brain - Anna Rothschild";
+  assert.equal(match(phrase), true);
+  const result = await handle(phrase, { planRuntime: runtime, now: new Date("2026-10-12T09:30:00+08:00") });
+  assert.equal(result.command, "记录TED-Ed英语听力");
+  assert.match(result.reply, /已记录 #12/u);
+  assert.match(result.reply, /10月14日、10月19日、11月2日、12月11日/u);
+  assert.deepEqual(saved, {
+    version: 1,
+    videos: [{
+      number: 12,
+      title: "What staying up all night does to your brain - Anna Rothschild",
+      studiedOn: "2026-10-12",
+      reviewDates: ["2026-10-14", "2026-10-19", "2026-11-02", "2026-12-11"],
+    }],
+  });
+});
+
+test("re-sending a TED-Ed number updates its title without resetting the review dates", async () => {
+  const original = {
+    version: 1,
+    videos: [{ number: 12, title: "Old title", studiedOn: "2026-10-10", reviewDates: ["2026-10-12", "2026-10-17", "2026-10-31", "2026-12-09"] }],
+  };
+  let saved = null;
+  const runtime = fixtureRuntime({
+    async runPlanner(args) {
+      if (args[0] === "get-plugin-state") return { found: true, value: original };
+      if (args[0] === "set-plugin-state") {
+        saved = JSON.parse(Buffer.from(args[args.indexOf("--payload-base64") + 1], "base64").toString("utf8"));
+        return { value: saved };
+      }
+      throw new Error("unexpected command");
+    },
+  });
+  const result = await handle("今日英语听力: 12 Corrected title", { planRuntime: runtime, now: new Date("2026-10-12T18:00:00+08:00") });
+  assert.match(result.reply, /已更新 #12 的标题/u);
+  assert.equal(saved.videos[0].title, "Corrected title");
+  assert.equal(saved.videos[0].studiedOn, "2026-10-10");
+  assert.deepEqual(saved.videos[0].reviewDates, original.videos[0].reviewDates);
+});
+
 test("monthly daily targets persist under the selected calendar month", async () => {
   const calls = [];
   const runtime = fixtureRuntime({
@@ -190,6 +242,8 @@ test("keyword list and verified mutation keep existing replies", async () => {
   const runtime = fixtureRuntime();
   const listed = await handle("英语关键词", { planRuntime: runtime });
   assert.match(listed.reply, /阅读：哈利波特/u);
+  assert.match(listed.reply, /英语关键词增加 阅读 上古卷轴5wiki/u);
+  assert.match(listed.reply, /英语关键词删除 阅读 上古卷轴5wiki/u);
   const added = await handle("英语关键词增加 阅读 瓦尔登湖", { planRuntime: runtime });
   assert.match(added.reply, /已增加阅读关键词“瓦尔登湖”，已重新统计已有计划/u);
 });

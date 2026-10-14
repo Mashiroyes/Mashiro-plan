@@ -19,6 +19,11 @@ try {
     Assert-True ($blockedHosts -contains 'bilibili.com') 'Bilibili missing before expiry.'
     Assert-True ($blockedHosts -contains 'im.qq.com') 'QQ missing before expiry.'
     Assert-True ($blockedHosts -contains 'hanime1.me') 'Permanent host missing before expiry.'
+    Assert-True ($blockedHosts -contains 'pixiv.net') 'Pixiv host is not permanent.'
+    Assert-True ($blockedHosts -contains 'pximg.net') 'Pixiv image host is not permanent.'
+    Assert-True ($blockedHosts -contains 'missav.com') 'MissAV host is not permanent.'
+    Assert-True ($clashRules -contains 'DOMAIN-SUFFIX,pixiv.net,REJECT') 'Pixiv Clash rule is missing.'
+    Assert-True ($browserPatterns -contains '*://*.missav.com/*') 'MissAV browser policy is missing.'
 
     [pscustomobject]@{ ExpiresAt = (Get-Date).AddMinutes(-1).ToString('o'); Status = 'Scheduled'; Notify = $false } |
         ConvertTo-Json | Set-Content -LiteralPath $expiryPath -Encoding UTF8

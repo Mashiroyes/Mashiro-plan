@@ -5,6 +5,11 @@ function Get-MashiroMachineConfigPath {
     return Join-Path $env:LOCALAPPDATA 'MashiroBot\config\machine.json'
 }
 
+function Resolve-MashiroRuntimeDescriptorPath {
+    if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is unavailable; cannot locate MashiroBot runtime descriptor.' }
+    return Join-Path $env:LOCALAPPDATA 'MashiroBot\config\runtime.json'
+}
+
 function Read-MashiroMachineConfig {
     param([string]$Path = (Get-MashiroMachineConfigPath))
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {

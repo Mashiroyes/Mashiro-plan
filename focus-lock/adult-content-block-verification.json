@@ -1,0 +1,80 @@
+{
+  "Timestamp": "2026-10-05T17:13:57.5423638+08:00",
+  "SourceSha256": "31BE0764D127062BE6CE50F2FCB06BD8FD8DFC8BDA3F332395AF2D4AA20036DA",
+  "RuntimeSha256": "31BE0764D127062BE6CE50F2FCB06BD8FD8DFC8BDA3F332395AF2D4AA20036DA",
+  "Status": {
+    "Installed": true,
+    "InstalledAt": "2026-07-31T18:14:56.4511999+08:00",
+    "ExpiresAt": "2099-12-31T23:59:59+08:00",
+    "BilibiliQQExpiresAt": null,
+    "BilibiliQQReleased": false,
+    "BilibiliTemporaryReleaseUntil": "2099-12-31T23:59:59+08:00",
+    "BilibiliTemporarilyReleased": true,
+    "HostsManaged": true,
+    "AdultDnsManaged": true,
+    "DnsAdapters": [
+      {
+        "InterfaceIndex": 17,
+        "Name": "WLAN",
+        "ServerAddresses": [
+          "1.1.1.3",
+          "1.0.0.3",
+          "2606:4700:4700::1113",
+          "2606:4700:4700::1003"
+        ],
+        "Managed": true
+      }
+    ],
+    "SecureDnsDisabled": true,
+    "Tasks": [
+      {
+        "TaskName": "CodexFocusLock-BilibiliTemporaryExpire",
+        "State": 1
+      },
+      {
+        "TaskName": "CodexFocusLock-BilibiliTempRestore",
+        "State": 1
+      },
+      {
+        "TaskName": "CodexFocusLock-QQScan",
+        "State": 3
+      },
+      {
+        "TaskName": "CodexFocusLock-Repair",
+        "State": 3
+      },
+      {
+        "TaskName": "CodexFocusLock-TimeoutReadingPrompt",
+        "State": 3
+      }
+    ],
+    "QuarantineCount": 0
+  },
+  "TaskEvidence": [
+    {
+      "TaskName": "CodexFocusLock-Repair",
+      "Exists": true,
+      "State": "Ready",
+      "LastTaskResult": 0,
+      "NextRunTime": "2026-10-05T17:14:40+08:00"
+    },
+    {
+      "TaskName": "CodexFocusLock-QQScan",
+      "Exists": true,
+      "State": "Ready",
+      "LastTaskResult": 0,
+      "NextRunTime": "2026-10-05T17:14:40+08:00"
+    }
+  ],
+  "BrowserEvidence": [
+    {
+      "Root": "HKLM:\\SOFTWARE\\Policies\\Google\\Chrome",
+      "DnsOverHttpsMode": "off"
+    },
+    {
+      "Root": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+      "DnsOverHttpsMode": "off"
+    }
+  ],
+  "Error": null
+}

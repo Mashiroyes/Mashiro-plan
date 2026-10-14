@@ -2,6 +2,7 @@
 param(
     [ValidateSet('Install','Remove','Status')][string]$Mode = 'Status',
     [Parameter(Mandatory = $false)][string]$SqlitePath,
+    [string]$RuntimeDescriptorPath,
     [string]$StateRoot = (Join-Path $env:ProgramData 'MashiroBot\mashirobot-plugin-block')
 )
 
@@ -20,6 +21,13 @@ $sourceLegacyTemplate = Join-Path $PSScriptRoot 'bilibili-qq-expiry.default.json
 $reapplyTask = 'MashiroBot-mashirobot-plugin-block-Reapply'
 $scanTask = 'MashiroBot-mashirobot-plugin-block-Scan'
 $statePath = Join-Path $StateRoot 'state.json'
+$planRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+$taskContractPath = Join-Path $planRoot 'core\deployment\task-contract.ps1'
+
+function Get-RuntimeContract {
+    if ($RuntimeDescriptorPath) { return Get-Content -LiteralPath ([IO.Path]::GetFullPath($RuntimeDescriptorPath)) -Raw -Encoding UTF8 | ConvertFrom-Json }
+    return [pscustomobject]@{ pwshPath=(Get-Command pwsh.exe -ErrorAction Stop).Source; nodePath=(Get-Command node.exe -ErrorAction Stop).Source }
+}
 
 function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -52,10 +60,11 @@ function Grant-TaskRunAccess([string]$name) {
 }
 
 function Register-RecurringTask([string]$name, [int]$minutes, [string]$mode) {
-    $pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
+    $runtime = Get-RuntimeContract
+    $pwsh = [string]$runtime.pwshPath
     if (-not (Test-Path -LiteralPath $pwsh -PathType Leaf)) { throw "PowerShell 7 not found: $pwsh" }
-    $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Mode {1} -SqlitePath "{2}" -StateRoot "{3}"' -f $worker, $mode, $SqlitePath, $StateRoot
-    $action = New-ScheduledTaskAction -Execute $pwsh -Argument $arguments
+    . $taskContractPath
+    $action = New-MashiroTaskAction -Runtime $runtime -WorkerPath $worker -Arguments @('-Mode',$mode,'-SqlitePath',$SqlitePath,'-StateRoot',$StateRoot,'-NodePath',[string]$runtime.nodePath)
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $triggers = @(
@@ -73,7 +82,8 @@ function Register-RecurringTask([string]$name, [int]$minutes, [string]$mode) {
 function Install-Block {
     Assert-Administrator
     if (-not $SqlitePath -or -not (Test-Path -LiteralPath $SqlitePath -PathType Leaf)) { throw 'Install requires an existing SQLite database path.' }
-    $pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
+    $runtime = Get-RuntimeContract
+    $pwsh = [string]$runtime.pwshPath
     New-Item -ItemType Directory -Path $workerRoot -Force | Out-Null
     Copy-Item -LiteralPath $sourceWorker -Destination $worker -Force
     Copy-Item -LiteralPath $sourceHelper -Destination $helper -Force
@@ -83,7 +93,7 @@ function Install-Block {
     Remove-Tasks
     Register-RecurringTask $reapplyTask 5 'Reapply'
     Register-RecurringTask $scanTask 1 'Scan'
-    $initialOutput = @(& $pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $worker -Mode Reapply -SqlitePath $SqlitePath -StateRoot $StateRoot 2>&1)
+    $initialOutput = @(& $pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $worker -Mode Reapply -SqlitePath $SqlitePath -StateRoot $StateRoot -NodePath ([string]$runtime.nodePath) 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "Initial block synchronization failed: $($initialOutput -join [Environment]::NewLine)" }
     $verifiedState = Get-Content -LiteralPath $statePath -Raw -Encoding utf8 | ConvertFrom-Json
     if (-not $verifiedState.LastSync.ok) { throw "Initial block synchronization did not produce a verified success state." }

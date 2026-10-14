@@ -15,6 +15,21 @@ function schedulerFor(status) {
   });
 }
 
+test("QQ status invocation parses the complete PowerShell JSON document", async () => {
+  let invocation = null;
+  const scheduler = createQqSessionScheduler({
+    pluginRoot: process.cwd(), sqlitePath: "planner.sqlite",
+    stateRoot: path.join(os.tmpdir(), `qq-scheduler-json-${Math.random()}`),
+    runLocalProcess: async (options) => {
+      invocation = options;
+      return { value: { ok: true, status: { phase: "ready", authorizationActive: false, clientBarrierActive: true, websiteBlockActive: true, executableReady: true } } };
+    },
+  });
+  assert.equal((await scheduler.preflight()).ok, true);
+  assert.equal(invocation.output, "json");
+  assert.equal(invocation.jsonMode, "document");
+});
+
 test("QQ preflight accepts an intentionally released barrier while playing", async () => {
   const result = await schedulerFor({ phase: "playing", authorizationActive: true, clientBarrierActive: false, websiteBlockActive: true, executableReady: true }).preflight();
   assert.equal(result.ok, true);
@@ -35,6 +50,28 @@ test("QQ preflight uses a fresh status cache without launching PowerShell", asyn
     runLocalProcess: async () => { throw new Error("PowerShell should not run"); },
   });
   assert.equal((await scheduler.preflight()).ok, true);
+});
+
+test("QQ preflight refreshes a fresh cache that reports a missing barrier", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "qq-scheduler-stale-barrier-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, "last-status.json"), JSON.stringify({
+    ok: true, phase: "ready", authorizationActive: false,
+    clientBarrierActive: false, websiteBlockActive: false, executableReady: true,
+  }));
+  let calls = 0;
+  const scheduler = createQqSessionScheduler({
+    pluginRoot: process.cwd(), sqlitePath: "planner.sqlite", stateRoot: root,
+    runLocalProcess: async () => {
+      calls += 1;
+      return { value: { ok: true, status: {
+        ok: true, phase: "ready", authorizationActive: false,
+        clientBarrierActive: true, websiteBlockActive: true, executableReady: true,
+      } } };
+    },
+  });
+  assert.equal((await scheduler.preflight()).ok, true);
+  assert.equal(calls, 1);
 });
 
 test("QQ begin starts the resident task and polls without blocking other promises", async (t) => {

@@ -7,7 +7,7 @@ const ACK = /^(?:收到|收到了|知道了|不用提醒了)(?:\s+(R\d{3}))?$/iu
 function shortIdFor(db) {
   for (let attempt = 0; attempt < 1000; attempt += 1) {
     const id = `R${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
-    if (!db.prepare("SELECT 1 FROM managed_reminders WHERE short_id=? AND status IN ('pending','sending','sent')").get(id)) return id;
+    if (!db.prepare("SELECT 1 FROM managed_reminders WHERE short_id=?").get(id)) return id;
   }
   throw new Error("unable to allocate reminder short ID");
 }

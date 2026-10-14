@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { createPlanRuntime, plannerRuntimePaths } from "../mashirobot-plugin-plan/bridge/planner-runner.mjs";
 import { shiftDate } from "../mashirobot-plugin-plan/shared/dates.mjs";
+import { formatReviewDates, parseTedEdListening, shanghaiDate, TEDED_REVIEW_STATE_KEY, upsertTedEdVideo } from "./teded-review.mjs";
 
 const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
 const defaultKeywordsPath = path.join(pluginRoot, "config", "english-skill-keywords.json");
@@ -263,7 +264,7 @@ function validateKeywordResult(result, command) {
 
 function keywordReply(result, command) {
   validateKeywordResult(result, command);
-  if (command.action === "list") return ["英语统计关键词：", ...Object.entries(result.keywords).map(([category, values]) => `${KEYWORD_LABELS[category]}：${values.builtIn.join("、")}${values.custom.length ? `；新增：${values.custom.join("、")}` : ""}`), "用法：英语关键词增加 阅读 上古卷轴5wiki"].join("\n");
+  if (command.action === "list") return ["英语统计关键词：", ...Object.entries(result.keywords).map(([category, values]) => `${KEYWORD_LABELS[category]}：${values.builtIn.join("、")}${values.custom.length ? `；新增：${values.custom.join("、")}` : ""}`), "用法：英语关键词增加 阅读 上古卷轴5wiki；英语关键词删除 阅读 上古卷轴5wiki"].join("\n");
   const label = KEYWORD_LABELS[result.category] ?? result.category;
   if (!result.changed) return `${label}关键词“${result.keyword}”${result.reason === "not-found" ? "没有找到" : "已存在"}，统计无需重算。`;
   return `${command.action === "add" ? "已增加" : "已删除"}${label}关键词“${result.keyword}”，已重新统计已有计划。`;
@@ -275,7 +276,7 @@ function runtimeFor(context) {
 
 export function match(message) {
   const text = String(message ?? "").trim();
-  return text === "/语言" || text === "/语言详细" || parseStudySimulation(text) !== null || parseDailyTarget(text) !== null || parseStatistics(text) !== null || parseKeywords(text) !== null;
+  return text === "/语言" || text === "/语言详细" || parseTedEdListening(text) !== null || parseStudySimulation(text) !== null || parseDailyTarget(text) !== null || parseStatistics(text) !== null || parseKeywords(text) !== null;
 }
 
 export async function handle(message, context = {}) {
@@ -286,6 +287,28 @@ export async function handle(message, context = {}) {
   }
   try {
     const runtime = runtimeFor(context);
+    const listening = parseTedEdListening(text);
+    if (listening) {
+      const state = await runtime.runPlanner([
+        "get-plugin-state", "--plugin-id", TARGET_PLUGIN_ID, "--state-key", TEDED_REVIEW_STATE_KEY,
+      ]);
+      const updated = upsertTedEdVideo(state?.found ? state.value : null, listening, shanghaiDate(context.now ?? new Date()));
+      const saved = await runtime.runPlanner([
+        "set-plugin-state", "--plugin-id", TARGET_PLUGIN_ID, "--state-key", TEDED_REVIEW_STATE_KEY,
+        "--payload-base64", Buffer.from(JSON.stringify(updated.catalog), "utf8").toString("base64"),
+      ]);
+      if (!saved?.value?.videos?.some((video) => Number(video.number) === listening.number && video.title === listening.title)) {
+        throw new Error("TED-Ed 听力记录保存结果无法确认");
+      }
+      return {
+        handled: true,
+        command: "记录TED-Ed英语听力",
+        reply: updated.created
+          ? `已记录 #${listening.number}：${listening.title}\n1.5倍速复习日期：${formatReviewDates(updated.video.reviewDates)}。`
+          : `已更新 #${listening.number} 的标题，原学习日期和复习安排保持不变。`,
+        mediaPaths: [],
+      };
+    }
     const simulation = parseStudySimulation(text);
     if (simulation) {
       if (simulation.error) return { handled: true, command: "学习时长假设模拟", reply: simulation.error, mediaPaths: [] };
@@ -353,5 +376,5 @@ export function healthCheck() {
 }
 
 export function getHelp() {
-  return { groups: [{ title: "英语统计", items: ["英语统计图：默认查看本周；也支持今天、昨天、周、月、年和具体日期", "学习时长假设：只计算假设对本月统计的影响，不修改数据", "英语关键词：查看、增加或删除统计关键词"] }], detailedGroups: [{ title: "统计指令", items: ["7月英语学习统计图", "本月目标时长：3h（也支持目标每天时长和小时）", "如果今天学习8h / 如果未来7天每天学习8h", "文字回复只显示间隔提醒，四项时长和目标对比显示在图片中"] }, { title: "关键词指令", items: ["英语关键词增加 阅读 上古卷轴5wiki", "英语关键词删除 阅读 上古卷轴5wiki", "新增或删除后会重算已有计划"] }], fallbackText: "英语统计图\n如果今天学习8h\n本月目标时长：3h\n英语关键词\n英语关键词增加 阅读 上古卷轴5wiki" };
+  return { groups: [{ title: "英语统计", items: ["英语统计图：默认查看本周；也支持今天、昨天、周、月、年和具体日期", "TED-Ed听力：记录当天视频，并在第2、7、21、60天提醒1.5倍速复习", "学习时长假设：只计算假设对本月统计的影响，不修改数据", "英语关键词：查看、增加或删除统计关键词"] }], detailedGroups: [{ title: "统计指令", items: ["7月英语学习统计图", "本月目标时长：3h（也支持目标每天时长和小时）", "如果今天学习8h / 如果未来7天每天学习8h", "文字回复只显示间隔提醒，四项时长和目标对比显示在图片中"] }, { title: "TED-Ed听力", items: ["今日英语听力：12 What staying up all night does to your brain - Anna Rothschild", "每天10:00的英语通知会列出当天到期视频"] }, { title: "关键词指令", items: ["英语关键词增加 阅读 上古卷轴5wiki", "英语关键词删除 阅读 上古卷轴5wiki", "新增或删除后会重算已有计划"] }], fallbackText: "英语统计图\n今日英语听力：12 视频标题\n如果今天学习8h\n本月目标时长：3h\n英语关键词" };
 }

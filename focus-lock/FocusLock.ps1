@@ -13,6 +13,10 @@ $installedScript = Join-Path $stateRoot 'FocusLock.ps1'
 $statePath = Join-Path $stateRoot 'state.json'
 $bilibiliQQExpiryPath = Join-Path $stateRoot 'bilibili-qq-expiry.json'
 $qqAuthorizationPath = Join-Path $stateRoot 'qq-play-authorization.json'
+$timeoutPromptSource = Join-Path $PSScriptRoot 'TimeoutReadingPrompt.ps1'
+$timeoutPromptScript = Join-Path $stateRoot 'TimeoutReadingPrompt.ps1'
+$qqCooldownSource = Join-Path $PSScriptRoot 'QQCooldownPrompt.ps1'
+$qqCooldownScript = Join-Path $stateRoot 'QQCooldownPrompt.ps1'
 $quarantineRoot = Join-Path $stateRoot 'quarantine'
 $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
 $hostsStart = '# BEGIN CODEX FOCUS LOCK'
@@ -22,6 +26,8 @@ $clashEnd = '# END CODEX FOCUS LOCK'
 $taskRepair = "$lockName-Repair"
 $taskScan = "$lockName-QQScan"
 $taskExpire = "$lockName-Expire"
+$legacyBlockedDebugger = "$env:SystemRoot\System32\cmd.exe /d /c exit"
+$qqCooldownDebugger = "`"$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$qqCooldownScript`""
 
 $bilibiliQQReleased = $false
 $qqReleased = $false
@@ -104,7 +110,13 @@ $qqHosts = @($bilibiliQQHosts | Where-Object { $_ -notmatch '(?i)(?:bilibili|b23
 
 $permanentBlockedHosts = @(
     'hanime1.me',
-    'www.hanime1.me'
+    'www.hanime1.me',
+    'pixiv.net',
+    'www.pixiv.net',
+    'pximg.net',
+    'i.pximg.net',
+    'missav.com',
+    'www.missav.com'
 )
 
 $bilibiliQQBrowserPatterns = @(
@@ -131,7 +143,13 @@ $qqBrowserPatterns = @($bilibiliQQBrowserPatterns | Where-Object { $_ -notmatch 
 
 $permanentBrowserPatterns = @(
     '*://hanime1.me/*',
-    '*://*.hanime1.me/*'
+    '*://*.hanime1.me/*',
+    '*://pixiv.net/*',
+    '*://*.pixiv.net/*',
+    '*://pximg.net/*',
+    '*://*.pximg.net/*',
+    '*://missav.com/*',
+    '*://*.missav.com/*'
 )
 
 $qqBlockedImages = @(
@@ -147,6 +165,7 @@ $qqBlockedImages = @(
 )
 $qqInstallerImages = @('QQSetup.exe','QQInstaller.exe')
 $qqClientImages = @($qqBlockedImages | Where-Object { $qqInstallerImages -notcontains $_ })
+$proxyBlockedImages = @('openvpn.exe','wireguard.exe','windscribe.exe','nordvpn.exe','expressvpn.exe','protonvpn.exe','tor.exe','psiphon3.exe','outline-client.exe')
 
 $bilibiliQQClashRules = @(
     'DOMAIN-SUFFIX,bilibili.com,REJECT',
@@ -165,7 +184,17 @@ $bilibiliClashRules = @($bilibiliQQClashRules | Where-Object { $_ -match '(?i)(?
 $qqClashRules = @($bilibiliQQClashRules | Where-Object { $_ -notmatch '(?i)(?:bilibili|b23|bilivideo|hdslb)' })
 
 $permanentClashRules = @(
-    'DOMAIN-SUFFIX,hanime1.me,REJECT'
+    'DOMAIN-SUFFIX,hanime1.me,REJECT',
+    'DOMAIN-SUFFIX,pixiv.net,REJECT',
+    'DOMAIN-SUFFIX,pximg.net,REJECT',
+    'DOMAIN-SUFFIX,missav.com,REJECT'
+)
+
+$familyDnsV4 = @('1.1.1.3', '1.0.0.3')
+$familyDnsV6 = @('2606:4700:4700::1113', '2606:4700:4700::1003')
+$secureDnsPolicyRoots = @(
+    'HKLM:\SOFTWARE\Policies\Google\Chrome',
+    'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
 )
 
 $blockedHosts = @($permanentBlockedHosts)
@@ -186,6 +215,7 @@ $browserPatterns += $qqBrowserPatterns
 $clashRules += $qqClashRules
 if (-not $qqPlayAuthorized) { $blockedImages += $qqClientImages }
 if (-not $qqInstallAuthorized) { $blockedImages += $qqInstallerImages }
+$blockedImages += $proxyBlockedImages
 
 $policyRoots = @(
     'HKLM:\SOFTWARE\Policies\Google\Chrome\URLBlocklist',
@@ -214,6 +244,21 @@ function Get-State {
 function Save-State([object]$State) {
     New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
     $State | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding UTF8
+}
+
+function Get-BlockedDebugger([string]$Image) {
+    if ($qqClientImages -contains $Image) { return $qqCooldownDebugger }
+    return $legacyBlockedDebugger
+}
+
+function Install-TimeoutPrompt([string]$UserName) {
+    if (-not (Test-Path -LiteralPath $timeoutPromptSource -PathType Leaf)) { throw 'Timeout reading prompt source is missing.' }
+    if (-not (Test-Path -LiteralPath $qqCooldownSource -PathType Leaf)) { throw 'QQ cooldown prompt source is missing.' }
+    if ($timeoutPromptSource -ne $timeoutPromptScript) { Copy-Item -LiteralPath $timeoutPromptSource -Destination $timeoutPromptScript -Force }
+    if ($qqCooldownSource -ne $qqCooldownScript) { Copy-Item -LiteralPath $qqCooldownSource -Destination $qqCooldownScript -Force }
+    $existingTask = Get-ScheduledTask -TaskName 'CodexFocusLock-TimeoutReadingPrompt' -ErrorAction SilentlyContinue
+    if ($existingTask -and [string]$existingTask.Actions[0].Arguments -match [regex]::Escape($timeoutPromptScript)) { return }
+    & $timeoutPromptScript -Mode InstallTask -UserName $UserName -StateRoot $stateRoot | Out-Null
 }
 
 function Remove-MarkedBlock([string]$Raw, [string]$Start, [string]$End) {
@@ -280,6 +325,77 @@ function Restore-BrowserPolicies([object[]]$Entries) {
     }
 }
 
+function Get-EligibleDnsAdapters {
+    if (-not (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue)) { return @() }
+    return @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+        Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch '(?i)virtual|hyper-v|wsl|clash|tap|tun' })
+}
+
+function Get-DnsBackup {
+    $result = [System.Collections.Generic.List[object]]::new()
+    foreach ($adapter in @(Get-EligibleDnsAdapters)) {
+        foreach ($family in @('IPv4','IPv6')) {
+            $current = Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily $family -ErrorAction SilentlyContinue
+            $result.Add([pscustomobject]@{
+                InterfaceIndex = [int]$adapter.ifIndex
+                AddressFamily = $family
+                ServerAddresses = @($current.ServerAddresses)
+            })
+        }
+    }
+    return @($result)
+}
+
+function Set-AdultFilterDns {
+    foreach ($adapter in @(Get-EligibleDnsAdapters)) {
+        $servers = @($familyDnsV4)
+        if ((Get-NetAdapterBinding -Name $adapter.Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue).Enabled) { $servers += $familyDnsV6 }
+        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $servers -ErrorAction Stop
+    }
+    & ipconfig.exe /flushdns | Out-Null
+}
+
+function Restore-DnsConfiguration([object[]]$Entries) {
+    foreach ($group in @($Entries | Group-Object InterfaceIndex)) {
+        $servers = @($group.Group | ForEach-Object { @($_.ServerAddresses) } | Where-Object { $_ })
+        if ($servers.Count) {
+            Set-DnsClientServerAddress -InterfaceIndex ([int]$group.Name) -ServerAddresses $servers -ErrorAction SilentlyContinue
+        } else {
+            Set-DnsClientServerAddress -InterfaceIndex ([int]$group.Name) -ResetServerAddresses -ErrorAction SilentlyContinue
+        }
+    }
+    & ipconfig.exe /flushdns | Out-Null
+}
+
+function Get-SecureDnsPolicyBackup {
+    $result = [System.Collections.Generic.List[object]]::new()
+    foreach ($root in $secureDnsPolicyRoots) {
+        $existed = Test-Path -Path $root
+        $policy = Get-ItemProperty -Path $root -ErrorAction SilentlyContinue
+        $value = if ($policy -and $policy.PSObject.Properties['DnsOverHttpsMode']) { $policy.DnsOverHttpsMode } else { $null }
+        $result.Add([pscustomobject]@{ Root=$root; KeyExisted=$existed; ValueExisted=($null -ne $value); Value=$value })
+    }
+    return @($result)
+}
+
+function Set-SecureDnsPolicies {
+    foreach ($root in $secureDnsPolicyRoots) {
+        if (-not (Test-Path -Path $root)) { New-Item -Path $root -Force | Out-Null }
+        New-ItemProperty -Path $root -Name DnsOverHttpsMode -Value 'off' -PropertyType String -Force | Out-Null
+    }
+}
+
+function Restore-SecureDnsPolicies([object[]]$Entries) {
+    foreach ($entry in @($Entries)) {
+        if ($entry.ValueExisted) {
+            New-Item -Path $entry.Root -Force | Out-Null
+            New-ItemProperty -Path $entry.Root -Name DnsOverHttpsMode -Value ([string]$entry.Value) -PropertyType String -Force | Out-Null
+        } elseif (Test-Path -Path $entry.Root) {
+            Remove-ItemProperty -Path $entry.Root -Name DnsOverHttpsMode -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Set-ImageBlocks([switch]$CaptureBackup) {
     $backups = [System.Collections.Generic.List[object]]::new()
     foreach ($image in $blockedImages) {
@@ -295,22 +411,22 @@ function Set-ImageBlocks([switch]$CaptureBackup) {
             })
         }
         New-Item -Path $key -Force | Out-Null
-        New-ItemProperty -Path $key -Name Debugger -Value "$env:SystemRoot\System32\cmd.exe /d /c exit" -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $key -Name Debugger -Value (Get-BlockedDebugger $image) -PropertyType String -Force | Out-Null
     }
     return @($backups)
 }
 
 function Sync-ImageBlocks([object]$State) {
-    foreach ($image in $qqBlockedImages) {
+    foreach ($image in @($qqBlockedImages + $proxyBlockedImages)) {
         $key = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$image"
         if ($blockedImages -contains $image) {
             New-Item -Path $key -Force | Out-Null
-            New-ItemProperty -Path $key -Name Debugger -Value "$env:SystemRoot\System32\cmd.exe /d /c exit" -PropertyType String -Force | Out-Null
+            New-ItemProperty -Path $key -Name Debugger -Value (Get-BlockedDebugger $image) -PropertyType String -Force | Out-Null
             continue
         }
         if (-not (Test-Path -Path $key)) { continue }
         $current = Get-ItemPropertyValue -Path $key -Name Debugger -ErrorAction SilentlyContinue
-        if ($current -ne "$env:SystemRoot\System32\cmd.exe /d /c exit") { continue }
+        if ($current -notin @($legacyBlockedDebugger, $qqCooldownDebugger)) { continue }
         $backup = @($State.IfeoBackups) | Where-Object { [string]$_.Image -eq $image } | Select-Object -First 1
         if ($backup -and $backup.DebuggerExisted) {
             New-ItemProperty -Path $key -Name Debugger -Value ([string]$backup.DebuggerValue) -PropertyType String -Force | Out-Null
@@ -528,18 +644,29 @@ function Register-LockTasks([datetime]$ExpiresAt) {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     $duration = $ExpiresAt - (Get-Date)
     if ($duration.TotalMinutes -lt 1) { $duration = New-TimeSpan -Minutes 1 }
+    $permanentSchedule = $duration.TotalDays -gt 365
 
     $repairAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$installedScript`" -Mode Reapply"
-    $repairTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ($duration + (New-TimeSpan -Hours 1))
+    $repairTrigger = if ($permanentSchedule) {
+        New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5)
+    } else {
+        New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ($duration + (New-TimeSpan -Hours 1))
+    }
     Register-ScheduledTask -TaskName $taskRepair -Action $repairAction -Trigger $repairTrigger -Principal $principal -Settings $settings -Force | Out-Null
 
     $scanAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$installedScript`" -Mode Scan"
-    $scanTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration ($duration + (New-TimeSpan -Hours 1))
+    $scanTrigger = if ($permanentSchedule) {
+        New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
+    } else {
+        New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration ($duration + (New-TimeSpan -Hours 1))
+    }
     Register-ScheduledTask -TaskName $taskScan -Action $scanAction -Trigger $scanTrigger -Principal $principal -Settings $settings -Force | Out-Null
 
-    $expireAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$installedScript`" -Mode Remove"
-    $expireTrigger = New-ScheduledTaskTrigger -Once -At $ExpiresAt
-    Register-ScheduledTask -TaskName $taskExpire -Action $expireAction -Trigger $expireTrigger -Principal $principal -Settings $settings -Force | Out-Null
+    if (-not $permanentSchedule) {
+        $expireAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$installedScript`" -Mode Remove"
+        $expireTrigger = New-ScheduledTaskTrigger -Once -At $ExpiresAt
+        Register-ScheduledTask -TaskName $taskExpire -Action $expireAction -Trigger $expireTrigger -Principal $principal -Settings $settings -Force | Out-Null
+    }
 }
 
 function Remove-LockTasks {
@@ -560,12 +687,18 @@ function Invoke-Install {
         Copy-Item -LiteralPath $PSCommandPath -Destination $installedScript -Force
     }
 
+    Install-TimeoutPrompt $env:USERNAME
+
     $installedAt = Get-Date
     $expiresAt = $installedAt.AddDays($DurationDays)
+    $dnsBackups = Get-DnsBackup
+    $secureDnsPolicyBackups = Get-SecureDnsPolicyBackup
     $policyEntries = Add-BrowserPolicies
     $ifeoBackups = Set-ImageBlocks -CaptureBackup
     Set-HostsBlock
     [void](Set-ClashBlocks $null)
+    Set-SecureDnsPolicies
+    Set-AdultFilterDns
     Stop-QQProcesses
 
     $state = [pscustomobject]@{
@@ -578,6 +711,8 @@ function Invoke-Install {
         DesktopPath = [Environment]::GetFolderPath('Desktop')
         PolicyEntries = @($policyEntries)
         IfeoBackups = @($ifeoBackups)
+        DnsBackups = @($dnsBackups)
+        SecureDnsPolicyBackups = @($secureDnsPolicyBackups)
     }
     Save-State $state
     Register-LockTasks $expiresAt
@@ -599,13 +734,34 @@ function Invoke-Reapply {
         return
     }
     Set-HostsBlock
-    $state.PolicyEntries = @(Add-BrowserPolicies)
+    if (-not $state.PSObject.Properties['DnsBackups']) {
+        $state | Add-Member -NotePropertyName DnsBackups -NotePropertyValue @(Get-DnsBackup)
+    }
+    if (-not $state.PSObject.Properties['SecureDnsPolicyBackups']) {
+        $state | Add-Member -NotePropertyName SecureDnsPolicyBackups -NotePropertyValue @(Get-SecureDnsPolicyBackup)
+    }
+    $newPolicyEntries = @(Add-BrowserPolicies)
+    $state.PolicyEntries = @($state.PolicyEntries) + $newPolicyEntries
+    foreach ($image in $proxyBlockedImages) {
+        if (@($state.IfeoBackups | Where-Object Image -eq $image).Count) { continue }
+        $key = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$image"
+        $ifeo = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+        $debugger = if ($ifeo -and $ifeo.PSObject.Properties['Debugger']) { $ifeo.Debugger } else { $null }
+        $state.IfeoBackups = @($state.IfeoBackups) + [pscustomobject]@{ Image=$image; KeyExisted=(Test-Path $key); DebuggerExisted=($null -ne $debugger); DebuggerValue=$debugger }
+    }
+    Set-SecureDnsPolicies
+    Set-AdultFilterDns
     if ($isPermanent) {
         $state.Permanent = $true
         $state.DurationDays = 'Permanent'
         $state.ExpiresAt = '2099-12-31T23:59:59+08:00'
     }
     Save-State $state
+    if (-not (Get-ScheduledTask -TaskName $taskRepair -ErrorAction SilentlyContinue) -or
+        -not (Get-ScheduledTask -TaskName $taskScan -ErrorAction SilentlyContinue)) {
+        Register-LockTasks ([datetime]$state.ExpiresAt)
+    }
+    Install-TimeoutPrompt ([string]$state.UserName)
     Sync-ImageBlocks $state
     [void](Set-ClashBlocks $state)
     Stop-QQProcesses
@@ -631,6 +787,8 @@ function Invoke-Remove {
     if ($state) {
         Restore-BrowserPolicies @($state.PolicyEntries)
         Restore-ImageBlocks @($state.IfeoBackups)
+        Restore-SecureDnsPolicies @($state.SecureDnsPolicyBackups)
+        Restore-DnsConfiguration @($state.DnsBackups)
     }
     Restore-Quarantine
     Remove-LockTasks
@@ -645,6 +803,14 @@ function Get-Status {
     if (Test-Path -LiteralPath $hostsPath) {
         $hostsManaged = [IO.File]::ReadAllText($hostsPath).Contains($hostsStart)
     }
+    $dnsDetails = @(Get-EligibleDnsAdapters | ForEach-Object {
+        $addresses = @(Get-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ErrorAction SilentlyContinue | ForEach-Object ServerAddresses)
+        [pscustomobject]@{ InterfaceIndex=$_.ifIndex; Name=$_.Name; ServerAddresses=$addresses; Managed=(($familyDnsV4 | Where-Object { $addresses -notcontains $_ }).Count -eq 0) }
+    })
+    $secureDnsDisabled = (($secureDnsPolicyRoots | Where-Object {
+        $policy = Get-ItemProperty -Path $_ -ErrorAction SilentlyContinue
+        (-not $policy) -or ([string]$policy.DnsOverHttpsMode -ne 'off')
+    }).Count -eq 0)
     [pscustomobject]@{
         Installed = ($null -ne $state)
         InstalledAt = if ($state) { $state.InstalledAt } else { $null }
@@ -654,6 +820,9 @@ function Get-Status {
         BilibiliTemporaryReleaseUntil = if ($bilibiliTemporaryReleaseUntil) { $bilibiliTemporaryReleaseUntil.ToString('o') } else { $null }
         BilibiliTemporarilyReleased = $bilibiliTemporarilyReleased
         HostsManaged = $hostsManaged
+        AdultDnsManaged = (($dnsDetails | Where-Object { -not $_.Managed }).Count -eq 0 -and $dnsDetails.Count -gt 0)
+        DnsAdapters = $dnsDetails
+        SecureDnsDisabled = $secureDnsDisabled
         Tasks = @($tasks)
         QuarantineCount = if (Test-Path -LiteralPath $quarantineRoot) {
             @(Get-ChildItem -LiteralPath $quarantineRoot -File -ErrorAction SilentlyContinue |
