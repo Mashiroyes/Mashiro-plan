@@ -111,10 +111,6 @@ $qqHosts = @($bilibiliQQHosts | Where-Object { $_ -notmatch '(?i)(?:bilibili|b23
 $permanentBlockedHosts = @(
     'hanime1.me',
     'www.hanime1.me',
-    'pixiv.net',
-    'www.pixiv.net',
-    'pximg.net',
-    'i.pximg.net',
     'missav.com',
     'www.missav.com'
 )
@@ -144,10 +140,6 @@ $qqBrowserPatterns = @($bilibiliQQBrowserPatterns | Where-Object { $_ -notmatch 
 $permanentBrowserPatterns = @(
     '*://hanime1.me/*',
     '*://*.hanime1.me/*',
-    '*://pixiv.net/*',
-    '*://*.pixiv.net/*',
-    '*://pximg.net/*',
-    '*://*.pximg.net/*',
     '*://missav.com/*',
     '*://*.missav.com/*'
 )
@@ -185,8 +177,6 @@ $qqClashRules = @($bilibiliQQClashRules | Where-Object { $_ -notmatch '(?i)(?:bi
 
 $permanentClashRules = @(
     'DOMAIN-SUFFIX,hanime1.me,REJECT',
-    'DOMAIN-SUFFIX,pixiv.net,REJECT',
-    'DOMAIN-SUFFIX,pximg.net,REJECT',
     'DOMAIN-SUFFIX,missav.com,REJECT'
 )
 

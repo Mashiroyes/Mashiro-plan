@@ -19,10 +19,13 @@ try {
     Assert-True ($blockedHosts -contains 'bilibili.com') 'Bilibili missing before expiry.'
     Assert-True ($blockedHosts -contains 'im.qq.com') 'QQ missing before expiry.'
     Assert-True ($blockedHosts -contains 'hanime1.me') 'Permanent host missing before expiry.'
-    Assert-True ($blockedHosts -contains 'pixiv.net') 'Pixiv host is not permanent.'
-    Assert-True ($blockedHosts -contains 'pximg.net') 'Pixiv image host is not permanent.'
+    Assert-True ($blockedHosts -notcontains 'pixiv.net') 'Pixiv host restriction still exists.'
+    Assert-True ($blockedHosts -notcontains 'pximg.net') 'Pixiv image host restriction still exists.'
     Assert-True ($blockedHosts -contains 'missav.com') 'MissAV host is not permanent.'
-    Assert-True ($clashRules -contains 'DOMAIN-SUFFIX,pixiv.net,REJECT') 'Pixiv Clash rule is missing.'
+    Assert-True ($clashRules -notcontains 'DOMAIN-SUFFIX,pixiv.net,REJECT') 'Pixiv Clash restriction still exists.'
+    Assert-True ($clashRules -notcontains 'DOMAIN-SUFFIX,pximg.net,REJECT') 'Pixiv image Clash restriction still exists.'
+    Assert-True ($browserPatterns -notcontains '*://*.pixiv.net/*') 'Pixiv browser restriction still exists.'
+    Assert-True ($browserPatterns -notcontains '*://*.pximg.net/*') 'Pixiv image browser restriction still exists.'
     Assert-True ($browserPatterns -contains '*://*.missav.com/*') 'MissAV browser policy is missing.'
 
     [pscustomobject]@{ ExpiresAt = (Get-Date).AddMinutes(-1).ToString('o'); Status = 'Scheduled'; Notify = $false } |
