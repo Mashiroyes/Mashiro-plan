@@ -47,6 +47,21 @@ try {
     if (-not ($dailyClassOk -and $dailyHourOk -and $dailyIntervalOk)) { throw ("Installed daily current-month trigger is incorrect: class=$dailyClassOk hour=$dailyHourOk interval=$dailyIntervalOk " + ($dailyTask | ConvertTo-Json -Compress -Depth 5)) }
     if ($installed.inspection.tasks[1].triggerClass -ne 'MSFT_TaskWeeklyTrigger' -or $installed.inspection.tasks[1].xml -notmatch '<Monday') { throw 'Installed weekly trigger is incorrect.' }
     if ($installed.inspection.tasks[2].xml -notmatch '<December' -or $installed.inspection.tasks[3].xml -match '<February') { throw 'Installed monthly or yearly calendar trigger is incorrect.' }
+    $planRoot = Split-Path -Parent (Split-Path -Parent $pluginRoot)
+    $jobCli = Join-Path $planRoot 'core\control\job-cli.mjs'
+    $jobs = @(& node $jobCli list $db | ConvertFrom-Json)
+    $englishJobs = @($jobs | Where-Object { $_.owner -eq 'mashirobot-plugin-language' })
+    if ($englishJobs.Count -ne 4) { throw 'English task desired-state records were not created.' }
+    foreach ($job in $englishJobs) {
+        $task = Get-ScheduledTask -TaskName $job.taskName -ErrorAction Stop
+        $action = @($task.Actions)[0]
+        if ([string]$job.payload.execution.executable -ne [string]$action.Execute -or [string]$job.payload.execution.arguments -ne [string]$action.Arguments) {
+            throw "English desired-state action does not match the installed task: $($job.taskName)"
+        }
+        if ([IO.Path]::GetFileName([string]$job.payload.execution.executable) -ne 'wscript.exe' -or [string]$job.payload.execution.arguments -notmatch 'run-hidden-worker\.vbs') {
+            throw "English desired-state action does not use the hidden launcher: $($job.taskName)"
+        }
+    }
     $installedPlugin = Join-Path $installed.runtimeRoot 'plugin'
     if (Test-Path -LiteralPath (Join-Path $installedPlugin 'windows\windows-notification.ps1')) { throw 'Installed English statistics runtime still contains the Windows notification helper.' }
     $launcher = Join-Path $installedPlugin 'windows\run-hidden-worker.vbs'

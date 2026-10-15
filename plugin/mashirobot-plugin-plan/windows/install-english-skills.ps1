@@ -152,11 +152,10 @@ function Set-EnglishSkillsCalendarTrigger([string]$TaskName, [string]$TriggerTyp
 foreach ($taskDefinition in $taskDefinitions) {
     $jobId = 'english-skills:' + $taskDefinition.PeriodType
     $arguments = '"{0}" "{1}" "{2}" "{3}" "{4}" "{5}" "{6}" 1' -f $launcher, $pwsh, $worker, $RuntimePlugin, $SqlitePath, $taskDefinition.PeriodType, $jobId
-    $workerArguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -PluginRoot "{1}" -SqlitePath "{2}" -PeriodType "{3}" -JobId "{4}" -JobVersion 1' -f $worker,$RuntimePlugin,$SqlitePath,$taskDefinition.PeriodType,$jobId
     $reconcileArguments=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action','Install','-SqlitePath',$SqlitePath,'-SourcePluginRoot',$SourcePluginRoot,'-RuntimeBase',$RuntimeBase,'-TaskSuffix',$TaskSuffix)
     if($RuntimeDescriptorPath){$reconcileArguments+=@('-RuntimeDescriptorPath',[IO.Path]::GetFullPath($RuntimeDescriptorPath))}
     $reconcile = @{executable=$pwsh;argumentList=$reconcileArguments}
-    [void](Invoke-JobCli 'upsert' @{jobId=$jobId;version=1;owner='mashirobot-plugin-language';kind='english-statistics';taskName=$taskDefinition.Name;runAt=(Get-Date).Date.AddHours($(if($taskDefinition.TriggerType -eq 'daily'){10}else{11})).ToString('o');recurrence=@{calendar=$taskDefinition.TriggerType};payload=@{execution=@{executable=$pwsh;arguments=$workerArguments};reconcile=$reconcile}})
+    [void](Invoke-JobCli 'upsert' @{jobId=$jobId;version=1;owner='mashirobot-plugin-language';kind='english-statistics';taskName=$taskDefinition.Name;runAt=(Get-Date).Date.AddHours($(if($taskDefinition.TriggerType -eq 'daily'){10}else{11})).ToString('o');recurrence=@{calendar=$taskDefinition.TriggerType};payload=@{execution=@{executable=$wscript;arguments=$arguments};reconcile=$reconcile}})
     $actionObject = New-ScheduledTaskAction -Execute $wscript -Argument $arguments
     $temporaryTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddYears(10)
     $scheduledTask = New-ScheduledTask -Action $actionObject -Trigger $temporaryTrigger -Settings $settings -Principal $principal
