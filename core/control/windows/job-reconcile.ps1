@@ -7,11 +7,15 @@ param(
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
 $cli=Join-Path (Split-Path -Parent $PSScriptRoot) 'job-cli.mjs'
 $recovered=0
+$expiredPastOneShot=0
 if($Mode-eq'Apply'){
  $recoverPayload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{"olderThanMinutes":30}'))
  $recoverRaw=& $NodePath $cli recover-stale $SqlitePath $recoverPayload 2>&1
  if($LASTEXITCODE-ne 0){throw($recoverRaw-join[Environment]::NewLine)}
  $recovered=[int](($recoverRaw-join'')|ConvertFrom-Json).recovered
+ $expireRaw=& $NodePath $cli expire-past-one-shot $SqlitePath 2>&1
+ if($LASTEXITCODE-ne 0){throw($expireRaw-join[Environment]::NewLine)}
+ $expiredPastOneShot=[int](($expireRaw-join'')|ConvertFrom-Json).expired
 }
 $raw=& $NodePath $cli list $SqlitePath 2>&1
 if($LASTEXITCODE-ne 0){throw($raw-join[Environment]::NewLine)}
@@ -44,8 +48,9 @@ if($Mode-eq'Apply'){
  foreach($job in $repair){
   try{
     if($actualByName.ContainsKey([string]$job.taskName)){Unregister-ScheduledTask -TaskName ([string]$job.taskName) -Confirm:$false -ErrorAction Stop}
-   if($job.payload.reconcile){
-    $reconcile=$job.payload.reconcile
+   $reconcileProperty=$job.payload.PSObject.Properties['reconcile']
+   if($null-ne$reconcileProperty-and$null-ne$reconcileProperty.Value){
+    $reconcile=$reconcileProperty.Value
     $invokeArgs=@($reconcile.argumentList|ForEach-Object{[string]$_})
     & ([string]$reconcile.executable) @invokeArgs|Out-Null
     if($LASTEXITCODE-ne 0){throw "Reconcile installer failed with exit code $LASTEXITCODE"}
@@ -63,4 +68,4 @@ if($Mode-eq'Apply'){
   }catch{$failed+=@{taskName=$job.taskName;error=$_.Exception.Message}}
  }
 }
-[ordered]@{ok=($failed.Count-eq 0);mode=$Mode;recoveredStale=$recovered;desired=$desired.Count;valid=@($desired|Where-Object{$actualByName.ContainsKey([string]$_.taskName)-and-not$driftedNames.ContainsKey([string]$_.taskName)}).Count;missing=@($missing|ForEach-Object{$_.taskName});drifted=@($drifted|ForEach-Object{$_.taskName});orphaned=@($orphaned|ForEach-Object{$_.TaskName});recreated=$recreated;removed=$removed;failed=$failed}|ConvertTo-Json -Depth 8 -Compress
+[ordered]@{ok=($failed.Count-eq 0);mode=$Mode;recoveredStale=$recovered;expiredPastOneShot=$expiredPastOneShot;desired=$desired.Count;valid=@($desired|Where-Object{$actualByName.ContainsKey([string]$_.taskName)-and-not$driftedNames.ContainsKey([string]$_.taskName)}).Count;missing=@($missing|ForEach-Object{$_.taskName});drifted=@($drifted|ForEach-Object{$_.taskName});orphaned=@($orphaned|ForEach-Object{$_.TaskName});recreated=$recreated;removed=$removed;failed=$failed}|ConvertTo-Json -Depth 8 -Compress
