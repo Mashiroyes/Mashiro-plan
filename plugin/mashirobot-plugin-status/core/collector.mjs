@@ -103,7 +103,7 @@ export function normalizeStatus(raw) {
   };
 }
 
-export async function collectStatus({ pwshPath = "pwsh.exe", timeoutMs, collector = collectorPath, kind = "status", runLocalProcess = defaultRunLocalProcess } = {}) {
+export async function collectStatus({ pwshPath = process.env.MASHIROBOT_PWSH || "pwsh.exe", timeoutMs, collector = collectorPath, kind = "status", runLocalProcess = defaultRunLocalProcess } = {}) {
   if (kind !== "status" && kind !== "hardware") throw new Error("未知状态采集模式");
   const effectiveTimeoutMs = timeoutMs ?? (kind === "hardware" ? 45_000 : 30_000);
   try {

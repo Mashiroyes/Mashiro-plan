@@ -32,7 +32,7 @@ function defaultTempRoot() {
 }
 
 function defaultPythonExecutable() {
-  return process.platform === "win32" ? "python" : "python3";
+  return process.env.MASHIROBOT_PYTHON || (process.platform === "win32" ? "python" : "python3");
 }
 
 function contentCacheFor(options = {}) {

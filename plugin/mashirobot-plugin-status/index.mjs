@@ -13,7 +13,7 @@ const HARDWARE_COMMANDS = new Set(["硬件信息", "hardware", "/硬件信息"])
 const RENDER_VERSION = "status-card-v2";
 
 function reply(text, command = "状态") { return { handled: true, command, reply: text, mediaPaths: [] }; }
-function pythonPath() { return "python"; }
+function pythonPath() { return process.env.MASHIROBOT_PYTHON || "python"; }
 
 export function match(message) {
   const text = String(message ?? "").trim();

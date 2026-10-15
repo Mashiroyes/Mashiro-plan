@@ -17,6 +17,7 @@ import { createMenuSessionStore } from "../menu/menu-session.mjs";
 import { createPluginRouter } from "../router/plugin-router.mjs";
 import { createClock } from "../time/clock.mjs";
 import { resolvePlanRoot } from "./plan-root.mjs";
+import { readRuntimeDescriptor } from "../deployment/runtime-descriptor.mjs";
 
 const defaultPlanRoot = resolvePlanRoot();
 
@@ -45,6 +46,20 @@ async function inspectPluginHealth(registry, timeoutMs) {
 
 export async function createMashiroBotRuntime(options = {}) {
   const planRoot = path.resolve(options.planRoot ?? defaultPlanRoot);
+  try {
+    const descriptor = options.runtimeDescriptor ?? readRuntimeDescriptor();
+    if (path.resolve(descriptor.planRoot) === planRoot) {
+      process.env.MASHIROBOT_PYTHON = descriptor.pythonPath;
+      process.env.MASHIROBOT_PWSH = descriptor.pwshPath;
+      process.env.MASHIROBOT_NODE = descriptor.nodePath;
+      const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === "path") || "Path";
+      const pinnedDirectories = [descriptor.pythonPath, descriptor.pwshPath, descriptor.nodePath]
+        .map((executable) => path.dirname(executable));
+      process.env[pathKey] = [...new Set([...pinnedDirectories, ...(process.env[pathKey] || "").split(path.delimiter).filter(Boolean)])].join(path.delimiter);
+    }
+  } catch {
+    // Development and isolated test runtimes may not have a machine descriptor.
+  }
   const sqlitePath = path.resolve(options.sqlitePath ?? path.join(planRoot, "sqlite", "openclaw-planner.sqlite"));
   const backupRoot = path.resolve(options.backupRoot ?? path.join(planRoot, "sqlite", "backups", "control"));
   const logger = options.logger ?? appendMashiroLog;

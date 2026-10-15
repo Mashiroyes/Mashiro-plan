@@ -59,7 +59,7 @@ export async function collectPluginHealth(registry) {
 }
 
 export async function runPlanHealthChecks({ exists = existsSync, now = Date.now, runPython = runLocalProcess } = {}) {
-  const python = "python";
+  const python = process.env.MASHIROBOT_PYTHON || "python";
   const paths = {
     manifest: path.join(pluginRoot, "plugin.json"),
     planner: path.join(pluginRoot, "planner", "planner.py"),

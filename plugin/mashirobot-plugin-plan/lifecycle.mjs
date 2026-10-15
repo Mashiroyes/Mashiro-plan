@@ -43,7 +43,7 @@ export function registerPlanLifecycle({
 
   undoManager.register("english-keyword", async ({ action, category, keyword }) => {
     await run({
-      executable: "python",
+      executable: process.env.MASHIROBOT_PYTHON || "python",
       args: [path.join(pluginRoot, "planner", "planner.py"), "manage-english-keywords", "--action", action, "--category", category, "--keyword", keyword],
       timeoutProfile: "python",
       operation: "manage-english-keyword",
@@ -66,7 +66,7 @@ export function registerPlanLifecycle({
     if (!previous) throw new Error("没有可恢复的上一计划版本");
     const payload = Buffer.from(JSON.stringify({ date: planDate, rawText: previous.raw_text, items }), "utf8").toString("base64");
     await run({
-      executable: "pwsh.exe",
+      executable: process.env.MASHIROBOT_PWSH || "pwsh.exe",
       args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(pluginRoot, "windows", "manage-plan.ps1"), "-Action", "SavePlan", "-PayloadBase64", payload],
       timeoutMs: 45_000,
       operation: "restore-plan-version",

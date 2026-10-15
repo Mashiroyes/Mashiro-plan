@@ -16,8 +16,8 @@ const managePlanScript = path.join(pluginRoot, "windows", "manage-plan.ps1");
 const routineReminderScript = path.join(pluginRoot, "windows", "routine-reminder.ps1");
 const CHART_CACHE_VERSION = "planner-chart-v2";
 
-function pythonExecutable() {
-  return "python";
+function pythonExecutable(context) {
+  return context.pythonExecutable || process.env.MASHIROBOT_PYTHON || "python";
 }
 
 function powershellExecutable(context) {
@@ -67,7 +67,7 @@ export function createPlanRuntime(context = {}) {
 
   const runPlanner = async (args, options = {}) => {
     const result = await runner({
-      executable: pythonExecutable(),
+      executable: pythonExecutable(context),
       args: [plannerCli, ...args.map(String)],
       timeoutMs: options.timeoutMs ?? options.timeout ?? 10_000,
       env: plannerEnvironment(context),

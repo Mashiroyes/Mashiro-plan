@@ -30,13 +30,13 @@ export async function runSystemDiagnostics({ sqlitePath, planRoot, env = process
   rows.push(entry("部署身份", deploymentMatches ? "ok" : "failed", `源码 ${identity.sourceCommit}，运行副本 ${identity.runtimeCommit}，数据库 ${identity.databasePath}`, deploymentMatches ? null : "运行正式部署同步程序"));
   try { const h = inspectDatabase(sqlitePath, { backupRoot: path.join(path.dirname(sqlitePath), "backups", "control") }); rows.push(entry("SQLite", h.ok && h.latestBackup ? "ok" : "failed", `完整性 ${h.integrity}，最近备份 ${h.latestBackup ?? "无"}`, h.ok && h.latestBackup ? null : "运行数据库备份恢复流程")); } catch { rows.push(entry("SQLite", "failed", "数据库无法读取", "先停止写入并从最近备份恢复")); }
   const gateway = process.platform === "win32"
-    ? await command("pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", "& openclaw gateway health --timeout 5000"], runner)
+    ? await command(process.env.MASHIROBOT_PWSH || "pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", "& openclaw gateway health --timeout 5000"], runner)
     : await command("openclaw", ["gateway", "health", "--timeout", "5000"], runner);
   rows.push(entry("微信网关", gateway.ok ? "ok" : "failed", gateway.ok ? "健康检查通过" : "健康检查失败", gateway.ok ? null : "运行网关恢复脚本"));
   if (process.platform === "win32") {
-    const tasks = await command("pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", "$t=@(Get-ScheduledTask -TaskName 'MashiroBot*','OpenClaw*' -ErrorAction SilentlyContinue);$t.Count"], runner); rows.push(entry("计划任务", tasks.ok ? "ok" : "unknown", tasks.ok ? `可读取，数量 ${tasks.text}` : "未核验", "以当前用户重新运行统一安装器"));
+    const tasks = await command(process.env.MASHIROBOT_PWSH || "pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", "$t=@(Get-ScheduledTask -TaskName 'MashiroBot*','OpenClaw*' -ErrorAction SilentlyContinue);$t.Count"], runner); rows.push(entry("计划任务", tasks.ok ? "ok" : "unknown", tasks.ok ? `可读取，数量 ${tasks.text}` : "未核验", "以当前用户重新运行统一安装器"));
     const hosts = path.join(env.SystemRoot ?? "C:\\Windows", "System32", "drivers", "etc", "hosts"); let hostsWritable=false; try{fs.accessSync(hosts,fs.constants.R_OK|fs.constants.W_OK);hostsWritable=true;}catch{} rows.push(entry("Hosts 写权限", hostsWritable ? "ok" : "failed", hostsWritable ? "当前进程可读写" : "当前进程不可写", hostsWritable ? null : "以管理员身份运行禁止名单同步"));
-    const policies = await command("pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-Item 'Registry::HKEY_CURRENT_USER\\Software\\Policies' -ErrorAction Stop|Out-Null"], runner); rows.push(entry("浏览器 Policy", policies.ok ? "ok" : "unknown", policies.ok ? "策略根可读取" : "策略根未核验", "检查当前用户注册表 Policy 权限"));
+    const policies = await command(process.env.MASHIROBOT_PWSH || "pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-Item 'Registry::HKEY_CURRENT_USER\\Software\\Policies' -ErrorAction Stop|Out-Null"], runner); rows.push(entry("浏览器 Policy", policies.ok ? "ok" : "unknown", policies.ok ? "策略根可读取" : "策略根未核验", "检查当前用户注册表 Policy 权限"));
     rows.push(entry("Clash 配置", fs.existsSync(path.join(env.USERPROFILE ?? "", ".config", "mihomo")) ? "ok" : "unknown", "仅检查配置目录", "确认 Clash 配置目录和控制端口"));
   } else rows.push(entry("Windows 控制层", "unknown", "当前不是 Windows", "在部署电脑运行自检"));
   try {
