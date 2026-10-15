@@ -13,6 +13,7 @@ else if (action === "complete") result = manager.complete(payload.jobId, payload
 else if (action === "cancel") result = { cancelled: manager.cancel(payload.jobId) };
 else if (action === "cancel-task") result = { cancelled: manager.cancelByTaskName(payload.taskName) };
 else if (action === "list") result = manager.listDesired();
+else if (action === "expire-past-one-shot") result = { expired: manager.expirePastOneShot(payload) };
 else if (action === "recover-stale") result = { recovered: manager.recoverStale(payload) };
 else throw new Error(`unknown job action: ${action}`);
 process.stdout.write(`${JSON.stringify(result)}\n`);

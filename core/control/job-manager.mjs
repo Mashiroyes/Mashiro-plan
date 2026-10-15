@@ -43,6 +43,15 @@ export function createJobManager({ sqlitePath, now = () => new Date() }) {
     cancelByTaskName(taskName) { return withDb((db) => db.prepare("UPDATE managed_jobs SET status='cancelled',version=version+1,updated_at=? WHERE task_name=? AND status NOT IN ('completed','cancelled')").run(iso(), taskName).changes); },
     get(jobId) { return withDb((db) => map(db.prepare("SELECT * FROM managed_jobs WHERE job_id=?").get(jobId))); },
     listDesired() { return withDb((db) => db.prepare("SELECT * FROM managed_jobs WHERE status IN ('desired','running') ORDER BY task_name").all().map(map)); },
+    expirePastOneShot({ before = now() } = {}) {
+      const at = new Date(before).toISOString();
+      return withDb((db) => db.prepare(`UPDATE managed_jobs
+        SET status='failed',completed_at=?,error='expired before task reconciliation',updated_at=?
+        WHERE status IN ('desired','running')
+          AND recurrence_json IS NULL
+          AND run_at IS NOT NULL
+          AND run_at<?`).run(at, at, at).changes);
+    },
     recoverStale({ olderThanMinutes = 30 } = {}) {
       const cutoff = new Date(new Date(now()).getTime() - Number(olderThanMinutes) * 60_000).toISOString();
       return withDb((db) => db.prepare("UPDATE managed_jobs SET status='desired',claimed_at=NULL,error='recovered stale claim',updated_at=? WHERE status='running' AND claimed_at<?").run(iso(), cutoff).changes);

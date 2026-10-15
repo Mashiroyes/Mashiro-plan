@@ -41,6 +41,43 @@ test("managed jobs reject stale versions and recurring completion returns to des
   assert.equal(jobs.get("test:daily").status, "desired");
 });
 
+test("managed jobs expire only past one-shot work that is still active", (t) => {
+  const f = fixture(t);
+  const now = new Date("2026-10-16T00:00:00Z");
+  const jobs = createJobManager({ sqlitePath: f.sqlitePath, now: () => now });
+  const add = (jobId, runAt, recurrence = null) => jobs.upsertDesired({
+    jobId,
+    version: 1,
+    owner: "test",
+    kind: "fixture",
+    taskName: `OpenClaw-${jobId}`,
+    runAt,
+    recurrence,
+  });
+
+  add("past-desired", "2026-10-15T00:00:00Z");
+  add("past-running", "2026-10-15T01:00:00Z");
+  assert.equal(jobs.claim("past-running", 1).claimed, true);
+  add("past-recurring", "2026-10-15T02:00:00Z", { calendar: "daily" });
+  add("future", "2026-10-17T00:00:00Z");
+  add("completed", "2026-10-15T03:00:00Z");
+  assert.equal(jobs.claim("completed", 1).claimed, true);
+  assert.equal(jobs.complete("completed", 1, { ok: true }).updated, true);
+  add("cancelled", "2026-10-15T04:00:00Z");
+  assert.equal(jobs.cancel("cancelled"), true);
+
+  assert.equal(jobs.expirePastOneShot(), 2);
+  for (const jobId of ["past-desired", "past-running"]) {
+    assert.equal(jobs.get(jobId).status, "failed");
+    assert.equal(jobs.get(jobId).error, "expired before task reconciliation");
+    assert.equal(jobs.get(jobId).completedAt, now.toISOString());
+  }
+  assert.equal(jobs.get("past-recurring").status, "desired");
+  assert.equal(jobs.get("future").status, "desired");
+  assert.equal(jobs.get("completed").status, "completed");
+  assert.equal(jobs.get("cancelled").status, "cancelled");
+});
+
 test("dispatch merges due low-priority reminders without claiming unrelated high-priority work", (t) => {
   const f = fixture(t);
   const manager = createReminderManager({ sqlitePath: f.sqlitePath });
