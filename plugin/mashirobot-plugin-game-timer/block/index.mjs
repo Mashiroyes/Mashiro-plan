@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolvePlanSourcePath } from "../../../core/runtime/source-paths.mjs";
 import { parseBlockCommand, getExpiry, getReleaseExpiry } from "./core/parser.mjs";
 import { createBlockStore } from "./core/storage.mjs";
 import { createBlockSyncer } from "./core/syncer.mjs";
@@ -10,7 +10,7 @@ import { applyControlMigrations, openControlDatabase } from "../../../core/contr
 import { classifyBlockRisk } from "./core/protected-targets.mjs";
 import { createOperationJournal } from "../../../core/control/operation-journal.mjs";
 
-const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-game-timer", "block");
 const TASK_NAME = "MashiroBot-mashirobot-plugin-block-Reapply";
 function result(reply, command = "禁止名单") { return { handled: true, command, reply, mediaPaths: [] }; }
 function formatExpiry(row) { return row.expiresAt ? `至 ${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "short", timeStyle: "short" }).format(new Date(row.expiresAt))}` : "永久"; }

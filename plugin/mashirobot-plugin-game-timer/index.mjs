@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolvePlanSourcePath } from "../../core/runtime/source-paths.mjs";
 import { parseGameTimerCommand } from "./core/parser.mjs";
 import { addGameToConfig, findConfiguredGame, loadGameConfig, removeGamesFromConfig } from "./core/game-config.mjs";
 import { buildTask } from "./core/timer-manager.mjs";
@@ -24,11 +24,10 @@ import { registerGameTimerLifecycle } from "./lifecycle.mjs";
 
 export const registerLifecycle = registerGameTimerLifecycle;
 
-const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-game-timer");
 const defaultConfigPath = path.join(pluginRoot, "core", "games.json");
 const defaultSqlitePath = path.resolve(pluginRoot, "..", "..", "sqlite", "openclaw-planner.sqlite");
 const defaultAuditTargetsPath = path.join(process.env.LOCALAPPDATA ?? pluginRoot, "MashiroBot", "usage-audit", "targets.json");
-const defaultQqNoonReleasePath = path.join(process.env.ProgramData ?? "C:\\ProgramData", "MashiroBot", "mashirobot-plugin-game-timer", "qq", "before-noon-release.json");
 const auditCommands = new Set(["查询今日使用审计", "查询本周使用审计", "查询QQ使用"]);
 
 function configPath(context) { return context.gameTimerConfigPath ?? defaultConfigPath; }
@@ -74,15 +73,6 @@ function shanghaiWeekStart(value) {
 
 function qqScheduler(context) {
   return context.qqSessionScheduler ?? createQqSessionScheduler({ pluginRoot, sqlitePath: sqlitePath(context), runLocalProcess: context.runLocalProcess });
-}
-
-function hasTemporaryQqNoonRelease(context, now) {
-  const releasePath = context.qqNoonReleasePath ?? defaultQqNoonReleasePath;
-  try {
-    const state = JSON.parse(fs.readFileSync(releasePath, "utf8"));
-    const expiresAt = new Date(state.expiresAt);
-    return state.purpose === "qq-before-noon-test" && !Number.isNaN(expiresAt.getTime()) && new Date(now) < expiresAt;
-  } catch { return false; }
 }
 
 function persistedQqPaths(context, store, targetPath) {
@@ -372,7 +362,7 @@ export function getHelp() {
         title: "QQ特殊规则",
         items: [
           "每天仅12:00—22:00可用",
-          "客户端按指令临时放行1—60分钟；当天第1次冷却60分钟，之后每次增加10分钟",
+          "客户端按指令临时放行1—60分钟；每次结束后固定冷却60分钟",
           "周末玩QQ4h仅星期日可成功启动一次；20:00前最多4小时，之后截短到24:00，结束后冷却60分钟",
           "QQ官网始终受限；冷却结束不恢复启动文件，QQ安装包会被自动删除",
           "QQ和清单中所有游戏只累计真实前台时间",

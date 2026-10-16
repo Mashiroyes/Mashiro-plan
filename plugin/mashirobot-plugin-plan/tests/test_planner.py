@@ -80,6 +80,41 @@ class PluginPlannerTests(unittest.TestCase):
         self.assertEqual(future_result["items"][0]["reminderStatus"], "pending")
         self.assertEqual(future_result["items"][0]["deliveryMode"], "schedule")
 
+    def test_calendar_outbox_is_idempotent_and_tracks_replacements(self) -> None:
+        first = self.cli("save-plan", "--payload-base64", encode_payload({
+            "date": "2099-02-01", "rawText": "计划一",
+            "items": [{"startTime": "09:00", "endTime": "10:00", "title": "英语听力"}],
+        }))
+        first_id = first["items"][0]["id"]
+        pending = self.cli("calendar-pending")
+        self.assertEqual(len(pending["items"]), 1)
+        self.assertEqual(pending["items"][0]["plan_item_id"], first_id)
+        self.assertTrue(pending["items"][0]["event_uid"].startswith("mashirobot-plan-"))
+
+        self.cli("calendar-backfill")
+        self.cli("calendar-backfill")
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM plan_calendar_sync").fetchone()[0], 1)
+
+        second = self.cli("save-plan", "--payload-base64", encode_payload({
+            "date": "2099-02-01", "rawText": "计划二",
+            "items": [{"startTime": "10:00", "title": "英语口语"}],
+        }))
+        second_id = second["items"][0]["id"]
+        pending = self.cli("calendar-pending")
+        actions = {row["plan_item_id"]: row["desired_action"] for row in pending["items"]}
+        self.assertEqual(actions, {first_id: "delete", second_id: "upsert"})
+
+        finished = self.cli("calendar-finish", "--payload-base64", encode_payload({
+            "planItemId": second_id, "status": "synced",
+            "remoteUrl": "https://dav.qq.com/calendar/test/item.ics", "etag": '"1"',
+            "calendarUrl": "https://dav.qq.com/calendar/test/",
+        }))
+        self.assertEqual(finished["status"], "synced")
+        status = self.cli("calendar-status")
+        self.assertEqual(status["counts"]["synced"], 1)
+        self.assertEqual(status["settings"]["account"], "2768442763@qq.com")
+
     def test_sleep_routine_date_uses_six_am_boundary_and_last_value(self) -> None:
         first = self.cli(
             "record-sleep",

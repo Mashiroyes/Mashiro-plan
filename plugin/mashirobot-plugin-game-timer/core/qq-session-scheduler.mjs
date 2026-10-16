@@ -34,6 +34,15 @@ function boundedStatus(status) {
   return JSON.stringify(summary).slice(0, 1_000);
 }
 
+function processFailureDetail(error) {
+  const raw = String(error?.stderr || error?.stdout || error?.message || "本地进程执行失败")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const detail = raw || "本地进程执行失败";
+  const suffix = error?.exitCode == null ? "" : `（退出码 ${error.exitCode}）`;
+  return `${detail.slice(0, 300)}${suffix}`;
+}
+
 function cacheCanAnswerPreflight(worker) {
   if (!worker || worker.ok === false) return false;
   const authorizedPlaying = worker.phase === "playing" && worker.authorizationActive === true;
@@ -54,7 +63,7 @@ export function createQqSessionScheduler({
   monotonicNow = () => performance.now(),
   delay = defaultDelay,
   pollIntervalMs = 100,
-  timeoutMs = 300_000,
+  timeoutMs = 40_000,
 } = {}) {
   const installer = path.resolve(pluginRoot, "qq", "powershell", "install-qq-session.ps1");
   const common = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", installer];
@@ -101,9 +110,18 @@ export function createQqSessionScheduler({
     status({ signal } = {}) { return invoke("Status", null, signal); },
     async preflight({ signal } = {}) {
       const cached = await cachedStatus({ freshOnly: true });
-      const status = cacheCanAnswerPreflight(cached)
-        ? { ok: true, status: cached, source: "cache" }
-        : await invoke("Status", null, signal);
+      let status;
+      try {
+        status = cacheCanAnswerPreflight(cached)
+          ? { ok: true, status: cached, source: "cache" }
+          : await invoke("Status", null, signal);
+      } catch (error) {
+        return {
+          ok: false,
+          errors: [`QQ限时执行器状态检查失败：${processFailureDetail(error)}`],
+          status: null,
+        };
+      }
       const worker = status.status;
       const errors = [];
       if (!status.ok) errors.push("QQ限时执行器未安装或状态异常");

@@ -4,10 +4,20 @@
     {
       "id": "tencent-weixin-2.4.x-messaging-v1",
       "versions": ["2.4.4", "2.4.8"],
+      "mode": "legacy-fast-routine",
       "fastRoutinePath": "dist/src/messaging/fast-routine.js",
       "processMessagePath": "dist/src/messaging/process-message.js",
       "fastRoutineMarkers": ["handleFastRoutineCommand"],
       "processMessageMarkers": ["./fast-routine.js", "fastRoutineResult"]
+    },
+    {
+      "id": "tencent-weixin-2.4.10-messaging-v2",
+      "versions": ["2.4.10"],
+      "mode": "injected-fast-routine",
+      "fastRoutinePath": "dist/src/messaging/fast-routine.js",
+      "processMessagePath": "dist/src/messaging/process-message.js",
+      "fastRoutineMarkers": [],
+      "processMessageMarkers": ["resolveWeixinInboundAuthorization", "resolveStoredQuoteContext", "sendMessageWeixin", "sendWeixinMediaFile"]
     }
   ]
 }

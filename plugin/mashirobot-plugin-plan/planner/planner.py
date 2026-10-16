@@ -44,6 +44,7 @@ def main() -> int:
     parser.add_argument("--action")
     parser.add_argument("--category")
     parser.add_argument("--keyword")
+    parser.add_argument("--limit", type=int, default=100)
     args = parser.parse_args()
     db = PlannerDatabase()
     try:
@@ -82,6 +83,10 @@ def main() -> int:
                 payload(args.payload_base64),
             ),
             "delete-plugin-state": lambda: db.delete_plugin_state(args.plugin_id or "", args.state_key or ""),
+            "calendar-backfill": db.backfill_calendar_sync,
+            "calendar-pending": lambda: db.list_calendar_sync(args.limit),
+            "calendar-finish": lambda: db.finish_calendar_sync(payload(args.payload_base64)),
+            "calendar-status": db.calendar_status,
             "chart": lambda: generate_chart(payload(args.payload_base64), args.output or ""),
             "english-skills-chart": lambda: generate_english_skills_chart(payload(args.payload_base64), args.output or ""),
         }

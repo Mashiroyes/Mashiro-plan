@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-export const QQ_FIRST_COOLDOWN_MINUTES = 60;
-export const QQ_COOLDOWN_STEP_MINUTES = 10;
-export const QQ_SPECIAL_COOLDOWN_MINUTES = 60;
+export const QQ_COOLDOWN_MINUTES = 60;
+export const QQ_SPECIAL_COOLDOWN_MINUTES = QQ_COOLDOWN_MINUTES;
 export const QQ_WINDOW_POLICIES = Object.freeze({
   DAILY: "daily",
   SUNDAY_FOUR_HOURS: "sunday-4h",
@@ -10,7 +9,7 @@ export const QQ_WINDOW_POLICIES = Object.freeze({
 
 export function cooldownMinutesForDailySession(sessionNumber) {
   if (!Number.isSafeInteger(sessionNumber) || sessionNumber < 1) throw new RangeError("sessionNumber must be a positive integer");
-  return QQ_FIRST_COOLDOWN_MINUTES + (sessionNumber - 1) * QQ_COOLDOWN_STEP_MINUTES;
+  return QQ_COOLDOWN_MINUTES;
 }
 
 function validDate(value, label) {

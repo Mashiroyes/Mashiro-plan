@@ -32,7 +32,6 @@ function fixture(now) {
       sqlitePath: plannerPath,
       gameTimerConfigPath: configPath,
       auditTargetsPath: path.join(root, "targets.json"),
-      qqNoonReleasePath: path.join(root, "before-noon-release.json"),
       qqSessionScheduler: scheduler,
       renderPluginHelp: () => ({ handled: true, reply: "help", mediaPaths: [] }),
     },
@@ -111,17 +110,6 @@ test("Sunday four-hour command rejects Saturday and Monday without side effects"
   }
 });
 
-test("temporary release file never bypasses the desktop daily QQ window", async () => {
-  const f = fixture("2026-09-20T03:59:59Z");
-  try {
-    fs.writeFileSync(f.context.qqNoonReleasePath, JSON.stringify({ purpose: "qq-before-noon-test", expiresAt: "2026-09-20T04:19:59Z" }));
-    const response = await handle("玩QQ6分钟", f.context);
-    assert.equal(response.reply, "每天12点之前不能同意玩QQ的请求，请12点之后再打开。");
-    assert.equal(f.calls.preflight, 0);
-    assert.equal(f.calls.begin, 0);
-  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
-});
-
 test("QQ requests at or beyond the evening boundary have no side effects", async () => {
   const atClose = fixture("2026-09-20T14:00:00Z");
   const crossing = fixture("2026-09-20T13:50:00Z");
@@ -136,17 +124,6 @@ test("QQ requests at or beyond the evening boundary have no side effects", async
     fs.rmSync(atClose.root, { recursive: true, force: true });
     fs.rmSync(crossing.root, { recursive: true, force: true });
   }
-});
-
-test("expired or malformed temporary release fails closed", async () => {
-  const f = fixture("2026-09-20T03:59:59Z");
-  try {
-    fs.writeFileSync(f.context.qqNoonReleasePath, JSON.stringify({ purpose: "qq-before-noon-test", expiresAt: "2026-09-20T03:59:58Z" }));
-    assert.equal((await handle("玩QQ6分钟", f.context)).reply, "每天12点之前不能同意玩QQ的请求，请12点之后再打开。");
-    fs.writeFileSync(f.context.qqNoonReleasePath, "broken");
-    assert.equal((await handle("玩QQ6分钟", f.context)).reply, "每天12点之前不能同意玩QQ的请求，请12点之后再打开。");
-    assert.equal(f.calls.preflight, 0);
-  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 });
 
 test("QQ preflight failure does not create a session", async () => {

@@ -98,7 +98,7 @@ plan/
 | 4 | `plugin\mashirobot-plugin-loot` | 记录当天最后一次爽点并在次日回放 | [战利品插件 README](plugin/mashirobot-plugin-loot/README.md) |
 | 5 | `plugin\mashirobot-plugin-language` | 英语听说读写统计与关键词管理 | [语言学习插件 README](plugin/mashirobot-plugin-language/README.md) |
 
-`mashirobot-plugin-financial-report` 当前处于禁用状态且不占用任何菜单编号；后续新增、启用并显示在菜单中的插件从 **6** 开始编号。
+财务课程插件已于 2026-10-16 完整移除；后续新增、启用并显示在菜单中的插件从 **6** 开始编号。
 
 ## 维护规则
 

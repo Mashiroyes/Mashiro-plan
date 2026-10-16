@@ -28,12 +28,15 @@ function Resolve-OpenClawLayout {
     $Layout = $Matches[0]
     $Fast = Join-Path $Root ([string]$Layout.fastRoutinePath -replace '/', '\')
     $Process = Join-Path $Root ([string]$Layout.processMessagePath -replace '/', '\')
-    foreach ($Path in @($Fast,$Process)) { if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Recognized layout $($Layout.id) is missing: $Path" } }
-    $FastText = Get-Content -LiteralPath $Fast -Raw -Encoding utf8
+    if (-not (Test-Path -LiteralPath $Process -PathType Leaf)) { throw "Recognized layout $($Layout.id) is missing: $Process" }
+    $Mode = if ($Layout.mode) { [string]$Layout.mode } else { 'legacy-fast-routine' }
+    if ($Mode -eq 'legacy-fast-routine' -and -not (Test-Path -LiteralPath $Fast -PathType Leaf)) { throw "Recognized layout $($Layout.id) is missing: $Fast" }
+    if ($Mode -notin @('legacy-fast-routine','injected-fast-routine')) { throw "Recognized layout $($Layout.id) has unsupported mode: $Mode" }
+    $FastText = if (Test-Path -LiteralPath $Fast -PathType Leaf) { Get-Content -LiteralPath $Fast -Raw -Encoding utf8 } else { '' }
     $ProcessText = Get-Content -LiteralPath $Process -Raw -Encoding utf8
     foreach ($Marker in @($Layout.fastRoutineMarkers)) { if (-not $FastText.Contains([string]$Marker)) { throw "Recognized layout $($Layout.id) failed fast-routine marker: $Marker" } }
     foreach ($Marker in @($Layout.processMessageMarkers)) { if (-not $ProcessText.Contains([string]$Marker)) { throw "Recognized layout $($Layout.id) failed process-message marker: $Marker" } }
-    return [pscustomobject]@{ Id=[string]$Layout.id; Version=[string]$Package.version; FastPath=$Fast; ProcessPath=$Process }
+    return [pscustomobject]@{ Id=[string]$Layout.id; Version=[string]$Package.version; Mode=$Mode; FastPath=$Fast; ProcessPath=$Process }
 }
 
 function Resolve-OpenClawPackageRoot {
@@ -57,10 +60,7 @@ function Resolve-OpenClawPackageRoot {
             ForEach-Object {
                 Join-Path $_.FullName 'node_modules\@tencent-weixin\openclaw-weixin'
             } |
-            Where-Object {
-                (Test-Path -LiteralPath (Join-Path $_ $FastRelativePath) -PathType Leaf) -and
-                (Test-Path -LiteralPath (Join-Path $_ $ProcessRelativePath) -PathType Leaf)
-            }
+            Where-Object { Test-Path -LiteralPath (Join-Path $_ $ProcessRelativePath) -PathType Leaf }
     )
 
     if ($Candidates.Count -ne 1) {
@@ -124,6 +124,63 @@ function New-CanonicalProcessText {
     return [regex]::Replace($Text, $CallState.Pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($Match) $Replacement }, 1)
 }
 
+function Get-InjectedProcessState {
+    param([string]$Text)
+    $Import = 'import { handleFastRoutineCommand } from "./fast-routine.js";'
+    $Start = '// MASHIROBOT_LOCAL_ROUTE_START'
+    $End = '// MASHIROBOT_LOCAL_ROUTE_END'
+    $ImportCount = ([regex]::Matches($Text, [regex]::Escape($Import))).Count
+    $StartCount = ([regex]::Matches($Text, [regex]::Escape($Start))).Count
+    $EndCount = ([regex]::Matches($Text, [regex]::Escape($End))).Count
+    if ($ImportCount -eq 1 -and $StartCount -eq 1 -and $EndCount -eq 1) { return 'Canonical' }
+    if ($ImportCount -eq 0 -and $StartCount -eq 0 -and $EndCount -eq 0) { return 'KnownUnpatched' }
+    throw "Unknown injected process-message.js state: import=$ImportCount, start=$StartCount, end=$EndCount."
+}
+
+function New-InjectedProcessText {
+    param([string]$Text, [string]$State)
+    if ($State -eq 'Canonical') { return $Text }
+    $ImportAnchor = 'import { handleSlashCommand } from "./slash-commands.js";'
+    if (([regex]::Matches($Text, [regex]::Escape($ImportAnchor))).Count -ne 1) { throw 'Unknown injected layout: slash-command import anchor was not unique.' }
+    $AuthAnchor = '    resolveStoredQuoteContext(ctx, full, deps.accountId);'
+    if (([regex]::Matches($Text, [regex]::Escape($AuthAnchor))).Count -ne 1) { throw 'Unknown injected layout: post-authorization anchor was not unique.' }
+    $Import = 'import { handleFastRoutineCommand } from "./fast-routine.js";'
+    $Route = @'
+    // MASHIROBOT_LOCAL_ROUTE_START
+    const fastRoutineResult = await handleFastRoutineCommand(rawBody, {
+        accountId: deps.accountId,
+        conversationId: full.from_user_id ?? ctx.To ?? "",
+        now: new Date(),
+    });
+    if (fastRoutineResult) {
+        const fastContextToken = getContextTokenFromMsgContext(ctx);
+        const fastRunId = randomUUID();
+        const fastReply = fastRoutineResult.reply ?? "";
+        const fastMediaPaths = Array.isArray(fastRoutineResult.mediaPaths) ? fastRoutineResult.mediaPaths : [];
+        if (fastReply || fastMediaPaths.length === 0) {
+            await sendMessageWeixin({
+                to: ctx.To,
+                text: fastReply,
+                opts: { baseUrl: deps.baseUrl, token: deps.token, contextToken: fastContextToken, runId: fastRunId, accountId: deps.accountId },
+            });
+        }
+        for (const filePath of fastMediaPaths) {
+            await sendWeixinMediaFile({
+                filePath,
+                to: ctx.To,
+                text: "",
+                opts: { baseUrl: deps.baseUrl, token: deps.token, contextToken: fastContextToken, runId: fastRunId, accountId: deps.accountId },
+                cdnBaseUrl: deps.cdnBaseUrl,
+            });
+        }
+        logger.info(`[weixin] MashiroBot local route handled command=${fastRoutineResult.command ?? "unknown"}, skipping AI pipeline`);
+        return;
+    }
+    // MASHIROBOT_LOCAL_ROUTE_END
+'@
+    return $Text.Replace($ImportAnchor, "$ImportAnchor`n$Import").Replace($AuthAnchor, "$AuthAnchor`n$Route")
+}
+
 function Invoke-NodeCheck {
     param([string]$FilePath)
     & $NodePath --check $FilePath
@@ -141,11 +198,7 @@ try {
     $Layout = Resolve-OpenClawLayout -Root $ResolvedPackageRoot
     $FastPath = $Layout.FastPath
     $ProcessPath = $Layout.ProcessPath
-    foreach ($Path in @($FastPath, $ProcessPath)) {
-        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-            throw "Required OpenClaw entry is missing: $Path"
-        }
-    }
+    if (-not (Test-Path -LiteralPath $ProcessPath -PathType Leaf)) { throw "Required OpenClaw entry is missing: $ProcessPath" }
 
     if (-not (Test-Path -LiteralPath $IndexPath -PathType Leaf)) { throw "MashiroBot entry is missing: $IndexPath" }
     $IndexUri = ([Uri]([IO.Path]::GetFullPath($IndexPath))).AbsoluteUri
@@ -153,20 +206,27 @@ try {
     if ($CanonicalTemplate -notmatch '__MASHIROBOT_INDEX_URI__' -or $CanonicalTemplate -notmatch '__MASHIROBOT_PLAN_ROOT__') { throw 'Canonical adapter template is missing an index URI or Plan root placeholder.' }
     $EscapedPlanRoot = ([IO.Path]::GetFullPath($PlanRoot)).Replace('\','\\').Replace('"','\"')
     $CanonicalText = $CanonicalTemplate.Replace('__MASHIROBOT_INDEX_URI__', $IndexUri).Replace('__MASHIROBOT_PLAN_ROOT__', $EscapedPlanRoot)
-    $FastText = Get-Content -LiteralPath $FastPath -Raw -Encoding utf8
+    $FastExists = Test-Path -LiteralPath $FastPath -PathType Leaf
+    $FastText = if ($FastExists) { Get-Content -LiteralPath $FastPath -Raw -Encoding utf8 } else { '' }
     $ProcessText = Get-Content -LiteralPath $ProcessPath -Raw -Encoding utf8
-    $FastState = Get-FastAdapterState -Text $FastText -CanonicalText $CanonicalText
-    $ProcessState = Get-ProcessCallState -Text $ProcessText
-    $NewProcessText = New-CanonicalProcessText -Text $ProcessText -CallState $ProcessState
+    $FastState = if ($FastText -eq $CanonicalText) { 'Canonical' } elseif ($Layout.Mode -eq 'injected-fast-routine' -and -not $FastExists) { 'Missing' } else { Get-FastAdapterState -Text $FastText -CanonicalText $CanonicalText }
+    if ($Layout.Mode -eq 'injected-fast-routine') {
+        $ProcessStateName = Get-InjectedProcessState -Text $ProcessText
+        $NewProcessText = New-InjectedProcessText -Text $ProcessText -State $ProcessStateName
+    } else {
+        $ProcessState = Get-ProcessCallState -Text $ProcessText
+        $ProcessStateName = $ProcessState.State
+        $NewProcessText = New-CanonicalProcessText -Text $ProcessText -CallState $ProcessState
+    }
 
     $NeedsFastWrite = $FastState -ne 'Canonical'
-    $NeedsProcessWrite = $ProcessState.State -ne 'Canonical'
+    $NeedsProcessWrite = $ProcessStateName -ne 'Canonical'
 
     if ($WhatIfReport) {
         Write-Output "PackageRoot: $ResolvedPackageRoot"
         Write-Output "PackageVersion: $($Layout.Version) | layout=$($Layout.Id)"
         Write-Output "Target: $FastPath | state=$FastState | action=$(if ($NeedsFastWrite) { 'replace full file with canonical adapter' } else { 'no change' })"
-        Write-Output "Target: $ProcessPath | state=$($ProcessState.State) | action=$(if ($NeedsProcessWrite) { 'replace fast-handler call only' } else { 'no change' })"
+        Write-Output "Target: $ProcessPath | state=$ProcessStateName | action=$(if ($NeedsProcessWrite) { if ($Layout.Mode -eq 'injected-fast-routine') { 'inject local route before AI dispatch' } else { 'replace fast-handler call only' } } else { 'no change' })"
         exit 0
     }
 
@@ -178,7 +238,7 @@ try {
     $Stamp = Get-Date -Format 'yyyyMMdd-HHmmssfff'
     $FastBackup = "$FastPath.bak.mashirobot-$Stamp"
     $ProcessBackup = "$ProcessPath.bak.mashirobot-$Stamp"
-    Copy-Item -LiteralPath $FastPath -Destination $FastBackup -ErrorAction Stop
+    if ($FastExists) { Copy-Item -LiteralPath $FastPath -Destination $FastBackup -ErrorAction Stop }
     Copy-Item -LiteralPath $ProcessPath -Destination $ProcessBackup -ErrorAction Stop
 
     try {
@@ -192,7 +252,7 @@ try {
         Invoke-NodeCheck -FilePath $ProcessPath
     }
     catch {
-        Copy-Item -LiteralPath $FastBackup -Destination $FastPath -Force
+        if (Test-Path -LiteralPath $FastBackup -PathType Leaf) { Copy-Item -LiteralPath $FastBackup -Destination $FastPath -Force } else { Remove-Item -LiteralPath $FastPath -Force -ErrorAction SilentlyContinue }
         Copy-Item -LiteralPath $ProcessBackup -Destination $ProcessPath -Force
         throw "Adapter validation failed and both OpenClaw entries were restored. $($_.Exception.Message)"
     }

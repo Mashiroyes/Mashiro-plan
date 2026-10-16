@@ -65,6 +65,8 @@ export async function runPlanHealthChecks({ exists = existsSync, now = Date.now,
     planner: path.join(pluginRoot, "planner", "planner.py"),
     managePlan: path.join(pluginRoot, "windows", "manage-plan.ps1"),
     routineReminder: path.join(pluginRoot, "windows", "routine-reminder.ps1"),
+    calendarSyncWorker: path.join(pluginRoot, "windows", "calendar-sync-worker.ps1"),
+    caldavClient: path.join(pluginRoot, "planner", "caldav_sync.py"),
     database: path.join(planRoot, "sqlite", "openclaw-planner.sqlite"),
   };
   const checks = Object.fromEntries(Object.entries(paths).map(([name, target]) => [name, healthEntry({

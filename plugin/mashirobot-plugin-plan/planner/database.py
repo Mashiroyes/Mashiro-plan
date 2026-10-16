@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import uuid
+import hashlib
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -149,7 +150,41 @@ class PlannerDatabase:
           last_seen_date TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS plan_calendar_settings (
+          id INTEGER PRIMARY KEY CHECK(id=1),
+          account TEXT NOT NULL,
+          endpoint TEXT NOT NULL,
+          calendar_name TEXT NOT NULL,
+          calendar_url TEXT,
+          schema_version INTEGER NOT NULL DEFAULT 1,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS plan_calendar_sync (
+          plan_item_id TEXT PRIMARY KEY REFERENCES plan_items(id),
+          event_uid TEXT NOT NULL UNIQUE,
+          desired_action TEXT NOT NULL CHECK(desired_action IN ('upsert','delete')),
+          sync_status TEXT NOT NULL CHECK(sync_status IN ('pending','synced','failed','paused')),
+          content_hash TEXT,
+          remote_url TEXT,
+          remote_etag TEXT,
+          attempt_count INTEGER NOT NULL DEFAULT 0,
+          next_attempt_at TEXT,
+          last_attempt_at TEXT,
+          last_success_at TEXT,
+          last_error TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_plan_calendar_sync_pending
+        ON plan_calendar_sync(sync_status,next_attempt_at,updated_at);
         """)
+        self.db.execute(
+            """INSERT INTO plan_calendar_settings
+            (id,account,endpoint,calendar_name,schema_version,updated_at)
+            VALUES(1,'2768442763@qq.com','https://dav.qq.com/','Plan 计划',1,?)
+            ON CONFLICT(id) DO NOTHING""",
+            (shanghai_iso(),),
+        )
         columns = {row["name"] for row in self.db.execute("PRAGMA table_info(daily_records)")}
         for name, definition in {
             "reading_title": "TEXT NOT NULL DEFAULT ''",
@@ -533,6 +568,95 @@ class PlannerDatabase:
         row = self.db.execute("SELECT COALESCE(MAX(revision_no),0) value FROM plan_revisions WHERE plan_date=?", (plan_date,)).fetchone()
         return int(row["value"]) + 1
 
+    @staticmethod
+    def calendar_event_uid(item_id: str) -> str:
+        return f"mashirobot-plan-{item_id}@2768442763.qq-calendar"
+
+    @staticmethod
+    def calendar_content_hash(item: dict[str, Any]) -> str:
+        material = "\x1f".join(str(item.get(key) or "") for key in ("planDate", "startTime", "endTime", "title"))
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+    def enqueue_calendar_item(self, item: dict[str, Any], action: str, now: str) -> None:
+        if action not in {"upsert", "delete"}:
+            raise ValueError("calendar action must be upsert or delete")
+        content_hash = self.calendar_content_hash(item) if action == "upsert" else None
+        self.db.execute(
+            """INSERT INTO plan_calendar_sync
+            (plan_item_id,event_uid,desired_action,sync_status,content_hash,created_at,updated_at)
+            VALUES(?,?,?,'pending',?,?,?)
+            ON CONFLICT(plan_item_id) DO UPDATE SET
+              desired_action=excluded.desired_action,sync_status='pending',
+              content_hash=excluded.content_hash,next_attempt_at=NULL,last_error=NULL,
+              updated_at=excluded.updated_at""",
+            (item["id"], self.calendar_event_uid(item["id"]), action, content_hash, now, now),
+        )
+
+    def enqueue_calendar_delete_row(self, row: sqlite3.Row, now: str) -> None:
+        self.enqueue_calendar_item({
+            "id": row["id"], "planDate": row["plan_date"], "startTime": row["start_time"],
+            "endTime": row["end_time"], "title": row["title"],
+        }, "delete", now)
+
+    def backfill_calendar_sync(self) -> dict[str, Any]:
+        now = shanghai_iso()
+        rows = self.db.execute(
+            "SELECT * FROM plan_items WHERE item_status='active' ORDER BY plan_date,start_time,created_at"
+        ).fetchall()
+        with self.transaction():
+            for row in rows:
+                self.enqueue_calendar_item({
+                    "id": row["id"], "planDate": row["plan_date"], "startTime": row["start_time"],
+                    "endTime": row["end_time"], "title": row["title"],
+                }, "upsert", now)
+        return {
+            "ok": True, "action": "calendar-backfill", "count": len(rows),
+            "fromDate": rows[0]["plan_date"] if rows else None,
+            "toDate": rows[-1]["plan_date"] if rows else None,
+        }
+
+    def list_calendar_sync(self, limit: int = 100) -> dict[str, Any]:
+        bounded = max(1, min(int(limit), 1000))
+        settings = self.row(self.db.execute("SELECT * FROM plan_calendar_settings WHERE id=1").fetchone())
+        rows = self.rows(
+            """SELECT s.*,p.plan_date,p.start_time,p.end_time,p.title,p.item_status
+            FROM plan_calendar_sync s JOIN plan_items p ON p.id=s.plan_item_id
+            WHERE s.sync_status IN ('pending','failed')
+              AND (s.next_attempt_at IS NULL OR s.next_attempt_at<=?)
+            ORDER BY s.updated_at,s.plan_item_id LIMIT ?""",
+            (shanghai_iso(), bounded),
+        )
+        return {"ok": True, "action": "calendar-pending", "settings": settings, "items": rows}
+
+    def finish_calendar_sync(self, payload: dict[str, Any]) -> dict[str, Any]:
+        item_id = str(payload.get("planItemId") or "")
+        status = str(payload.get("status") or "")
+        if not item_id or status not in {"synced", "failed", "paused"}:
+            raise ValueError("invalid calendar sync result")
+        now = shanghai_iso()
+        error = str(payload.get("error") or "")[:1000] or None
+        with self.transaction():
+            cursor = self.db.execute(
+                """UPDATE plan_calendar_sync SET sync_status=?,remote_url=COALESCE(?,remote_url),
+                remote_etag=COALESCE(?,remote_etag),attempt_count=attempt_count+1,
+                last_attempt_at=?,last_success_at=CASE WHEN ?='synced' THEN ? ELSE last_success_at END,
+                last_error=?,next_attempt_at=?,updated_at=? WHERE plan_item_id=?""",
+                (status, payload.get("remoteUrl"), payload.get("etag"), now, status, now,
+                 None if status == "synced" else error, payload.get("nextAttemptAt"), now, item_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("calendar sync item was not found")
+            if payload.get("calendarUrl"):
+                self.db.execute("UPDATE plan_calendar_settings SET calendar_url=?,updated_at=? WHERE id=1", (payload["calendarUrl"], now))
+        return {"ok": True, "action": "calendar-finish", "planItemId": item_id, "status": status}
+
+    def calendar_status(self) -> dict[str, Any]:
+        counts = {row["sync_status"]: row["count"] for row in self.db.execute(
+            "SELECT sync_status,COUNT(*) count FROM plan_calendar_sync GROUP BY sync_status"
+        )}
+        return {"ok": True, "action": "calendar-status", "counts": counts,
+                "settings": self.row(self.db.execute("SELECT * FROM plan_calendar_settings WHERE id=1").fetchone())}
+
     def classify_reminder(self, start_at: datetime, end_at: datetime | None, mode: str = "normal") -> str:
         now = shanghai_now()
         if start_at > now + timedelta(seconds=5):
@@ -597,7 +721,10 @@ class PlannerDatabase:
         if not isinstance(values, list) or not values: raise ValueError("items must be a non-empty array")
         now = shanghai_iso()
         with self.transaction():
-            canceled = [row["reminder_task_name"] for row in self.db.execute("SELECT reminder_task_name FROM plan_items WHERE plan_date=? AND item_status='active' AND reminder_status IN ('pending','pending_immediate','sending')", (plan_date,)) if row["reminder_task_name"]]
+            old_rows = self.db.execute("SELECT * FROM plan_items WHERE plan_date=? AND item_status='active'", (plan_date,)).fetchall()
+            canceled = [row["reminder_task_name"] for row in old_rows if row["reminder_task_name"] and row["reminder_status"] in ('pending','pending_immediate','sending')]
+            for row in old_rows:
+                self.enqueue_calendar_delete_row(row, now)
             self.db.execute("UPDATE plan_items SET item_status='superseded',updated_at=? WHERE plan_date=? AND item_status='active'", (now, plan_date))
             revision_id = str(uuid.uuid4()); revision_no = self.next_revision(plan_date)
             self.db.execute("INSERT INTO plan_revisions VALUES (?,?,?,'full',?,?)", (revision_id, plan_date, revision_no, raw_text, now))
@@ -605,6 +732,7 @@ class PlannerDatabase:
             for item in items:
                 self.persist_item(item, now)
                 self.persist_english_skill_item(item, now)
+                self.enqueue_calendar_item(item, "upsert", now)
         return {"ok": True, "action": "save-plan", "planDate": plan_date, "revisionNo": revision_no, "canceledTasks": canceled, "items": items}
 
     def query_english_skills(self, from_date: str, to_date: str, granularity: str) -> dict[str, Any]:
@@ -677,10 +805,12 @@ class PlannerDatabase:
             revision_id = str(uuid.uuid4()); revision_no = self.next_revision(plan_date)
             self.db.execute("INSERT INTO plan_revisions VALUES (?,?,?,'modify',?,?)", (revision_id, plan_date, revision_no, raw, now))
             self.db.execute("UPDATE plan_items SET item_status='superseded',updated_at=? WHERE id=?", (now, old["id"]))
+            self.enqueue_calendar_delete_row(old, now)
             value = {"logicalKey": old["logical_key"], "startTime": payload.get("startTime") or old["start_time"], "endTime": old["end_time"] if "endTime" not in payload else payload.get("endTime"), "title": payload.get("title") or old["title"]}
             replacement = self.make_item(plan_date, revision_id, value, old["id"], "modified")
             self.persist_item(replacement, now)
             self.persist_english_skill_item(replacement, now)
+            self.enqueue_calendar_item(replacement, "upsert", now)
         return {"ok": True, "action": "modify-item", "planDate": plan_date, "revisionNo": revision_no, "canceledTasks": [old["reminder_task_name"]] if old["reminder_task_name"] else [], "items": [replacement]}
 
     def record_completion(self, payload: dict[str, Any]) -> dict[str, Any]:

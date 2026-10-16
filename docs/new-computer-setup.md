@@ -151,13 +151,12 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-game-ti
 
 游戏计时器的单次提醒/强退任务由插件在创建计时时自动注册，不需要预先手工调用 `install-game-timer.ps1`。
 
-5. 分步部署时，按需要安装其余后台功能。财报插件默认关闭；只有启用该插件时才安装财报 worker。
+5. 分步部署时，按需要安装其余后台功能。财务课程插件已经移除，不再部署相关 worker。
 
 ```powershell
 $db = (Resolve-Path .\sqlite\openclaw-planner.sqlite).Path
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-loot\windows\install.ps1 -Action Install -SqlitePath $db
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-plan\windows\install-english-skills.ps1 -Action Install -SqlitePath $db
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-financial-report\windows\install-financial-report.ps1 -Action Install -SqlitePath $db
 # 使用审计是可选功能；先准备新电脑的 targets.json，再执行：
 # pwsh -NoProfile -ExecutionPolicy Bypass -File .\plugin\mashirobot-plugin-game-timer\audit\powershell\install-audit.ps1 -Mode Install -SqlitePath $db -TargetsPath 'C:\path\to\targets.json'
 ```

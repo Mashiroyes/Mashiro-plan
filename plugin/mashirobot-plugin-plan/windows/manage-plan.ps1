@@ -141,6 +141,16 @@ if ($Action -in @('SavePlan', 'ModifyItem')) {
     $result | Add-Member -NotePropertyName verifiedTasks -NotePropertyValue $verifiedTasks -Force
     $result | Add-Member -NotePropertyName partialFailure -NotePropertyValue (-not ($verifiedDatabase -and $verifiedTasks)) -Force
     if ($taskErrors.Count) { $result | Add-Member -NotePropertyName taskError -NotePropertyValue ($taskErrors -join '; ') -Force }
+    $calendarResult = $null
+    if (-not $DryRun) {
+        try {
+            $calendarRaw = & pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'calendar-sync-worker.ps1') -Action Reconcile -Limit 20 -SqlitePath $script:ControlSqlite 2>&1
+            $calendarResult = (($calendarRaw -join '') | ConvertFrom-Json)
+        } catch {
+            $calendarResult = [pscustomobject]@{ok=$false;queued=$true;error='Calendar synchronization is pending.'}
+        }
+    } else { $calendarResult = [pscustomobject]@{ok=$true;dryRun=$true} }
+    $result | Add-Member -NotePropertyName calendarSync -NotePropertyValue $calendarResult -Force
 }
 
 $result | ConvertTo-Json -Depth 12 -Compress

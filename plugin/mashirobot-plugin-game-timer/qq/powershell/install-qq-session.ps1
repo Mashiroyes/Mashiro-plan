@@ -172,9 +172,15 @@ function Install-QQSession {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2)
     $definition = New-ScheduledTask -Action $action -Trigger $triggers -Principal $principal -Settings $settings
     Register-ScheduledTask -TaskName $taskName -InputObject $definition -Force | Out-Null
+    # The ScheduledTasks module omits StopExisting from its generated enum on
+    # some Windows builds, although Task Scheduler's XML schema supports it.
+    # Re-register through XML so an interactive /Run replaces a sleeping Watch.
+    [xml]$taskXml = Export-ScheduledTask -TaskName $taskName
+    $taskXml.Task.Settings.MultipleInstancesPolicy = 'StopExisting'
+    Register-ScheduledTask -TaskName $taskName -Xml $taskXml.OuterXml -Force | Out-Null
     Grant-TaskRunAccess $taskName
     [xml]$xml = Export-ScheduledTask -TaskName $taskName
-    if ([string]$xml.Task.Actions.Exec.Arguments -notmatch [regex]::Escape($worker)) { throw 'QQ task action verification failed.' }
+    if ([string]$xml.Task.Actions.Exec.Arguments -notmatch [regex]::Escape($worker) -or [string]$xml.Task.Settings.MultipleInstancesPolicy -ne 'StopExisting') { throw 'QQ task action or instance policy verification failed.' }
 
     $launchAction = New-MashiroTaskAction -Runtime $runtime -WorkerPath $worker -Arguments (@('-Mode','LaunchInteractive') + $commonRuntimeArguments)
     $launchPrincipal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited

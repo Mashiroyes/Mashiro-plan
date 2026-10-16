@@ -11,14 +11,6 @@ foreach($suffix in @('-wal','-shm')){if(Test-Path -LiteralPath ($db+$suffix)){Co
 Copy-Item -LiteralPath (Join-Path $focusRoot 'FocusLock.ps1') -Destination (Join-Path $backup 'FocusLock.ps1.before-qq-session') -Force
 if(Test-Path -LiteralPath (Join-Path $focusRoot 'state.json')){Copy-Item -LiteralPath (Join-Path $focusRoot 'state.json') -Destination $backup -Force}
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'FocusLock.ps1') -Destination (Join-Path $focusRoot 'FocusLock.ps1') -Force
-foreach($mapping in @(
- @{Source=(Join-Path $sourceRoot 'qq-temporary-release.ps1');Target=(Join-Path $env:USERPROFILE 'qq-temporary-release.ps1')},
- @{Source=(Join-Path $sourceRoot 'verify-qq-temporary-release.ps1');Target=(Join-Path $env:USERPROFILE 'verify-qq-temporary-release.ps1')},
- @{Source=(Join-Path $sourceRoot 'Restore-QQTempExpiry.ps1');Target=(Join-Path $focusRoot 'Restore-QQTempExpiry.ps1')}
-)){
- if(Test-Path -LiteralPath $mapping.Target -PathType Leaf){Copy-Item -LiteralPath $mapping.Target -Destination (Join-Path $backup ([IO.Path]::GetFileName($mapping.Target)+'.before')) -Force}
- Copy-Item -LiteralPath $mapping.Source -Destination $mapping.Target -Force
-}
 Stop-ScheduledTask -TaskName 'MashiroBot-QQSession-Reconcile' -ErrorAction SilentlyContinue
 & pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'install-qq-session.ps1') -Mode Install -SqlitePath $db | Out-Null
 

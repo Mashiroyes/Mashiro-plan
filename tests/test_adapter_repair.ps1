@@ -27,7 +27,7 @@ function Assert-Equal {
 function New-FakePackage {
     param(
         [Parameter(Mandatory)][string]$Root,
-        [ValidateSet('KnownOld', 'Canonical', 'UnknownFast', 'UnknownProcess')]
+        [ValidateSet('KnownOld', 'Canonical', 'InjectedUnpatched', 'UnknownFast', 'UnknownProcess')]
         [string]$Layout = 'KnownOld',
         [string]$Version = '2.4.8'
     )
@@ -67,6 +67,22 @@ export function process(rawBody) {
   return handleFastRoutineCommand(rawBody, { source: "unknown" });
 }
 '@
+    $InjectedProcess = @'
+import { randomUUID } from "node:crypto";
+import { logger } from "../util/logger.js";
+import { sendWeixinMediaFile } from "./send-media.js";
+import { sendMessageWeixin } from "./send.js";
+import { resolveWeixinInboundAuthorization } from "./authorization.js";
+import { resolveStoredQuoteContext, getContextTokenFromMsgContext } from "./inbound.js";
+import { handleSlashCommand } from "./slash-commands.js";
+export async function processOneMessage(full, deps) {
+    const ctx = { Body: "", To: full.from_user_id };
+    const rawBody = ctx.Body?.trim() ?? "";
+    await resolveWeixinInboundAuthorization({ rawBody });
+    resolveStoredQuoteContext(ctx, full, deps.accountId);
+    return rawBody;
+}
+'@
 
     switch ($Layout) {
         'KnownOld' {
@@ -80,6 +96,10 @@ export function process(rawBody) {
         'UnknownFast' {
             Set-Content -LiteralPath (Join-Path $Messaging 'fast-routine.js') -Value $UnknownFast -Encoding utf8 -NoNewline
             Set-Content -LiteralPath (Join-Path $Messaging 'process-message.js') -Value $ProcessOld -Encoding utf8 -NoNewline
+        }
+        'InjectedUnpatched' {
+            Remove-Item -LiteralPath (Join-Path $Messaging 'fast-routine.js') -Force -ErrorAction SilentlyContinue
+            Set-Content -LiteralPath (Join-Path $Messaging 'process-message.js') -Value $InjectedProcess -Encoding utf8 -NoNewline
         }
         'UnknownProcess' {
             Set-Content -LiteralPath (Join-Path $Messaging 'fast-routine.js') -Value $OldFast -Encoding utf8 -NoNewline
@@ -150,6 +170,24 @@ try {
     & $RepairScript -PackageRoot $Known244Root | Out-Null
     Assert-Equal 0 $LASTEXITCODE 'observed 2.4.4 layout must repair successfully'
     Assert-Equal $script:GeneratedCanonicalText (Get-Content -LiteralPath (Join-Path $Known244Messaging 'fast-routine.js') -Raw -Encoding utf8) '2.4.4 must receive the same verified adapter contract'
+
+    # Version 2.4.10 removed fast-routine.js. Repair must recreate it and inject
+    # the local route after authorization but before any AI dispatch.
+    $InjectedRoot = Join-Path $TempRoot 'injected-2.4.10'
+    $InjectedMessaging = New-FakePackage -Root $InjectedRoot -Layout InjectedUnpatched -Version '2.4.10'
+    & $RepairScript -PackageRoot $InjectedRoot | Out-Null
+    Assert-Equal 0 $LASTEXITCODE '2.4.10 injected layout must repair successfully'
+    Assert-Equal $script:GeneratedCanonicalText (Get-Content -LiteralPath (Join-Path $InjectedMessaging 'fast-routine.js') -Raw -Encoding utf8) '2.4.10 must recreate the canonical adapter'
+    $InjectedPatched = Get-Content -LiteralPath (Join-Path $InjectedMessaging 'process-message.js') -Raw -Encoding utf8
+    Assert-True ($InjectedPatched -match 'MASHIROBOT_LOCAL_ROUTE_START') '2.4.10 must contain the guarded local route block'
+    Assert-True ($InjectedPatched -match 'const fastRoutineResult = await handleFastRoutineCommand') '2.4.10 must await MashiroBot before AI dispatch'
+    Assert-True ($InjectedPatched -match 'skipping AI pipeline') 'matched local commands must terminate the AI pipeline'
+    Assert-True ($InjectedPatched.IndexOf('resolveStoredQuoteContext') -lt $InjectedPatched.IndexOf('MASHIROBOT_LOCAL_ROUTE_START')) 'local routing must run after authorization and quote context setup'
+    $InjectedBackupCount = @(Get-ChildItem -LiteralPath $InjectedMessaging -Filter '*.bak.mashirobot-*').Count
+    Assert-Equal 1 $InjectedBackupCount '2.4.10 first repair backs up the existing process file only'
+    & $RepairScript -PackageRoot $InjectedRoot | Out-Null
+    Assert-Equal 0 $LASTEXITCODE '2.4.10 second repair must succeed'
+    Assert-Equal $InjectedBackupCount @(Get-ChildItem -LiteralPath $InjectedMessaging -Filter '*.bak.mashirobot-*').Count '2.4.10 repair must be idempotent'
 
     # Already repaired package is a no-op.
     $CanonicalRoot = Join-Path $TempRoot 'canonical'

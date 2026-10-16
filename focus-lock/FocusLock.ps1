@@ -236,6 +236,16 @@ function Save-State([object]$State) {
     $State | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding UTF8
 }
 
+function Merge-PolicyEntries([object[]]$Existing, [object[]]$Added) {
+    $byIdentity = [ordered]@{}
+    foreach ($entry in @($Existing) + @($Added)) {
+        if (-not $entry) { continue }
+        $key = '{0}`0{1}`0{2}' -f ([string]$entry.Root), ([string]$entry.Name), ([string]$entry.Value)
+        if (-not $byIdentity.Contains($key)) { $byIdentity[$key] = $entry }
+    }
+    return @($byIdentity.Values)
+}
+
 function Get-BlockedDebugger([string]$Image) {
     if ($qqClientImages -contains $Image) { return $qqCooldownDebugger }
     return $legacyBlockedDebugger
@@ -731,7 +741,7 @@ function Invoke-Reapply {
         $state | Add-Member -NotePropertyName SecureDnsPolicyBackups -NotePropertyValue @(Get-SecureDnsPolicyBackup)
     }
     $newPolicyEntries = @(Add-BrowserPolicies)
-    $state.PolicyEntries = @($state.PolicyEntries) + $newPolicyEntries
+    $state.PolicyEntries = @(Merge-PolicyEntries @($state.PolicyEntries) $newPolicyEntries)
     foreach ($image in $proxyBlockedImages) {
         if (@($state.IfeoBackups | Where-Object Image -eq $image).Count) { continue }
         $key = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$image"

@@ -84,9 +84,12 @@ $LayoutRegistry = Get-Content -LiteralPath $LayoutRegistryPath -Raw -Encoding UT
 $LayoutMatches = @($LayoutRegistry.layouts | Where-Object { @($_.versions) -contains [string]$PackageJson.version })
 if ($LayoutMatches.Count -ne 1) { throw "Unsupported Tencent Weixin package version/layout during preflight: $($PackageJson.version)" }
 $ResolvedLayout = $LayoutMatches[0]
-foreach ($RelativePath in @([string]$ResolvedLayout.fastRoutinePath,[string]$ResolvedLayout.processMessagePath)) {
-    $Candidate = Join-Path $ResolvedPackage ($RelativePath -replace '/', '\')
-    if (-not (Test-Path -LiteralPath $Candidate -PathType Leaf)) { throw "Recognized OpenClaw layout $($ResolvedLayout.id) is missing: $Candidate" }
+$ProcessCandidate = Join-Path $ResolvedPackage (([string]$ResolvedLayout.processMessagePath) -replace '/', '\')
+if (-not (Test-Path -LiteralPath $ProcessCandidate -PathType Leaf)) { throw "Recognized OpenClaw layout $($ResolvedLayout.id) is missing: $ProcessCandidate" }
+$ResolvedMode = if ($ResolvedLayout.mode) { [string]$ResolvedLayout.mode } else { 'legacy-fast-routine' }
+if ($ResolvedMode -eq 'legacy-fast-routine') {
+    $FastCandidate = Join-Path $ResolvedPackage (([string]$ResolvedLayout.fastRoutinePath) -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $FastCandidate -PathType Leaf)) { throw "Recognized OpenClaw layout $($ResolvedLayout.id) is missing: $FastCandidate" }
 }
 $InteractiveUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $ClashRoot = if ($env:APPDATA) { Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev' } else { $null }

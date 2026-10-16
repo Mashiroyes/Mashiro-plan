@@ -26,7 +26,7 @@ test("QQ accepts one through sixty minutes in the daily Shanghai window", () => 
   assert.equal(canStartQqSession(new Date("2026-09-20T14:00:00Z"), 1), false);
 });
 
-test("requested play time receives its daily escalating cooldown after installation", () => {
+test("requested play time receives its fixed one-hour cooldown after installation", () => {
   const request = buildQqRequest({ now: "2026-09-15T04:00:00Z", id: "one", minutes: 20 });
   assert.equal(request.confirmedAt, null);
   assert.equal(phaseAt(request, "2026-09-15T04:04:59Z"), "preparing");
@@ -37,10 +37,10 @@ test("requested play time receives its daily escalating cooldown after installat
   assert.equal(phaseAt(active, "2026-09-15T04:25:00Z"), "cooldown");
 });
 
-test("daily cooldown starts at one hour and increases ten minutes per successful QQ start", () => {
+test("daily cooldown stays fixed at one hour for every successful QQ start", () => {
   assert.equal(cooldownMinutesForDailySession(1), 60);
-  assert.equal(cooldownMinutesForDailySession(2), 70);
-  assert.equal(cooldownMinutesForDailySession(3), 80);
+  assert.equal(cooldownMinutesForDailySession(2), 60);
+  assert.equal(cooldownMinutesForDailySession(3), 60);
   assert.throws(() => cooldownMinutesForDailySession(0), /positive/);
   const { root, sqlitePath } = fixture();
   try {
@@ -52,16 +52,16 @@ test("daily cooldown starts at one hour and increases ten minutes per successful
     store.setPhase("one", "ready", null, "2026-09-15T05:11:00Z");
     store.createPreparing(buildQqRequest({ now: "2026-09-15T05:12:00Z", id: "two", minutes: 10 }));
     const second = store.activateAfterInstall("two", "2026-09-15T05:13:00Z");
-    assert.equal(second.cooldownEndsAt, "2026-09-15T06:33:00.000Z");
+    assert.equal(second.cooldownEndsAt, "2026-09-15T06:23:00.000Z");
     store.setPhase("two", "cooldown", null, "2026-09-15T05:23:00Z");
-    store.setPhase("two", "ready", null, "2026-09-15T06:33:00Z");
+    store.setPhase("two", "ready", null, "2026-09-15T06:23:00Z");
     store.createPreparing(buildQqRequest({ now: "2026-09-15T06:24:00Z", id: "three", minutes: 10 }));
     const third = store.activateAfterInstall("three", "2026-09-15T06:25:00Z");
-    assert.equal(third.cooldownEndsAt, "2026-09-15T07:55:00.000Z");
+    assert.equal(third.cooldownEndsAt, "2026-09-15T07:35:00.000Z");
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("daily cooldown count resets at Shanghai midnight and excludes Sunday special sessions", () => {
+test("daily and Sunday special sessions all keep the fixed cooldown across Shanghai midnight", () => {
   const { root, sqlitePath } = fixture();
   try {
     const store = createQqSessionStore(sqlitePath);
@@ -83,9 +83,9 @@ test("daily cooldown count resets at Shanghai midnight and excludes Sunday speci
 
     store.createPreparing(buildQqRequest({ now: "2026-10-11T10:14:00Z", id: "daily-two", minutes: 10 }));
     const second = store.activateAfterInstall("daily-two", "2026-10-11T10:15:00Z");
-    assert.equal(second.cooldownEndsAt, "2026-10-11T11:35:00.000Z");
+    assert.equal(second.cooldownEndsAt, "2026-10-11T11:25:00.000Z");
     store.setPhase("daily-two", "cooldown", null, "2026-10-11T10:25:00Z");
-    store.setPhase("daily-two", "ready", null, "2026-10-11T11:35:00Z");
+    store.setPhase("daily-two", "ready", null, "2026-10-11T11:25:00Z");
 
     store.createPreparing(buildQqRequest({ now: "2026-10-12T04:00:00Z", id: "next-day", minutes: 10 }));
     const reset = store.activateAfterInstall("next-day", "2026-10-12T04:01:00Z");

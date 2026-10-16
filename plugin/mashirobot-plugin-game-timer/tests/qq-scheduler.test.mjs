@@ -74,6 +74,20 @@ test("QQ preflight refreshes a fresh cache that reports a missing barrier", asyn
   assert.equal(calls, 1);
 });
 
+test("QQ preflight keeps PowerShell failure local and reports its concrete cause", async () => {
+  const error = new Error("The local process exited unsuccessfully.");
+  error.stderr = "Get-ScheduledTask: Access is denied.";
+  error.exitCode = 1;
+  const scheduler = createQqSessionScheduler({
+    pluginRoot: process.cwd(), sqlitePath: "planner.sqlite",
+    stateRoot: path.join(os.tmpdir(), `qq-scheduler-process-error-${Math.random()}`),
+    runLocalProcess: async () => { throw error; },
+  });
+  const result = await scheduler.preflight();
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("；"), /Access is denied.*退出码 1/u);
+});
+
 test("QQ begin starts the resident task and polls without blocking other promises", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "qq-scheduler-begin-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

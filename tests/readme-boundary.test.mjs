@@ -60,17 +60,14 @@ test("plan plugin README is the complete operational reference", async () => {
   }
 });
 
-test("root README assigns menu 5 to language learning and excludes the disabled financial plugin from numbering", async () => {
+test("root README assigns menu 5 to language learning and records financial plugin removal", async () => {
   const root = await readFile(rootReadmePath, "utf8");
   assert.match(root, /\|\s*5\s*\|\s*`plugin\\mashirobot-plugin-language`\s*\|/);
   assert.doesNotMatch(root, /\|\s*5\s*\|\s*`plugin\\mashirobot-plugin-financial-report`\s*\|/);
-  assert.match(root, /mashirobot-plugin-financial-report.*禁用状态.*不占用任何菜单编号/u);
+  assert.match(root, /财务课程插件.*完整移除/u);
   for (const internal of ["financial_report_course_state", "补学招股书第N课", "agent:main:financial-report-feedback:"]) {
     assert.equal(root.includes(internal), false);
   }
 
-  const financial = await readFile(path.join(planRoot, "plugin", "mashirobot-plugin-financial-report", "README.md"), "utf8");
-  for (const required of ["每天 12:20", "每周二、周五 18:10", "补学第N天", "补学招股书第N课", "聊天模式", "financial_report_course_state", "MashiroBot Financial Report Daily", "测试"]) {
-    assert.ok(financial.includes(required), `financial plugin README is missing: ${required}`);
-  }
+  await assert.rejects(readFile(path.join(planRoot, "plugin", "mashirobot-plugin-financial-report", "README.md"), "utf8"), /ENOENT/);
 });

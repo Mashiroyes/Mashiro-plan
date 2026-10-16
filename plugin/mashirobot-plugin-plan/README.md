@@ -224,6 +224,23 @@
 | `english_skill_plan_entries` | 当前及历史计划项目的听说读写/Anki 分类与时长 |
 | `english_skill_deliveries` | 周、月、年自动统计图的幂等投递状态 |
 | `learned_english_reading_titles` | 从每日记录自动学习的英文小说书名 |
+| `plan_calendar_settings` | QQ CalDAV 非敏感配置和目标日历地址 |
+| `plan_calendar_sync` | 计划项目到 QQ 日历事件的幂等映射与重试状态 |
+
+## QQ 日历同步
+
+当前有效计划会写入 `2768442763@qq.com` 的 QQ CalDAV 日历 `Plan 计划`。IMAP 仍只负责邮件，日历同步端点为 `https://dav.qq.com/`。完整计划替换或单项修改会删除旧事件并为新项目创建稳定 UID；缺少结束时间时按开始后两小时结束。CalDAV 不可用不会回滚本地计划，`MashiroBot Plan Calendar Sync` 每 15 分钟重试。
+
+授权码只保存在 Windows 凭据管理器，不写入 SQLite、仓库或日志：
+
+```powershell
+pwsh -NoProfile -File .\windows\configure-calendar-sync.ps1 -Action Configure
+pwsh -NoProfile -File .\windows\calendar-sync-worker.ps1 -Action DryRunBackfill
+pwsh -NoProfile -File .\windows\calendar-sync-worker.ps1 -Action Backfill
+pwsh -NoProfile -File .\windows\install-calendar-sync.ps1 -Action Install
+```
+
+新版 Outlook 不支持 QQ CalDAV 所需的 COM 插件。查看同一日历需使用经典 Outlook 和 Outlook CalDav Synchronizer，配置 QQ 完整邮箱地址、QQ 邮箱授权码及 `https://dav.qq.com/`，再选择 `Plan 计划` 日历。
 
 不要重建或清空正式数据库。结构变更必须可重复执行，并在变更前完成 WAL checkpoint、`PRAGMA integrity_check` 和安全备份。
 

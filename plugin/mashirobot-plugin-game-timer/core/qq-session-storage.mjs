@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { QQ_SPECIAL_COOLDOWN_MINUTES, cooldownMinutesForDailySession } from "./qq-session-model.mjs";
+import { QQ_COOLDOWN_MINUTES } from "./qq-session-model.mjs";
 
 const BLOCKING_PHASES = "'preparing','playing','cooldown','uninstall_failed'";
 const TRANSITIONS = new Map([
@@ -204,17 +204,6 @@ function mapInstalledExecutableVault(row) {
   };
 }
 
-function shanghaiDateBounds(value) {
-  const instant = new Date(value);
-  if (Number.isNaN(instant.getTime())) throw new TypeError("confirmedAt must be valid");
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(instant);
-  const fields = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
-  const startUtc = Date.UTC(Number(fields.year), Number(fields.month) - 1, Number(fields.day), -8);
-  return { start: new Date(startUtc).toISOString(), end: new Date(startUtc + 24 * 60 * 60_000).toISOString() };
-}
-
 export function createQqSessionStore(sqlitePath) {
   if (!sqlitePath) throw new TypeError("sqlitePath is required");
   const resolved = path.resolve(String(sqlitePath));
@@ -277,14 +266,7 @@ export function createQqSessionStore(sqlitePath) {
           ? Math.max(1, Math.ceil((playEndDate.getTime() - confirmed.getTime()) / 60_000))
           : Number(row.play_minutes);
         const playEndsAt = playEndDate.toISOString();
-        let cooldownMinutes = QQ_SPECIAL_COOLDOWN_MINUTES;
-        if (row.window_policy === "daily") {
-          const day = shanghaiDateBounds(confirmed);
-          const priorCount = Number(db.prepare(`SELECT COUNT(*) AS count FROM qq_timed_sessions
-            WHERE window_policy='daily' AND confirmed_at IS NOT NULL AND phase <> 'failed'
-              AND confirmed_at >= ? AND confirmed_at < ?`).get(day.start, day.end).count);
-          cooldownMinutes = cooldownMinutesForDailySession(priorCount + 1);
-        }
+        const cooldownMinutes = QQ_COOLDOWN_MINUTES;
         const cooldownEndsAt = new Date(new Date(playEndsAt).getTime() + cooldownMinutes * 60_000).toISOString();
         const result = db.prepare(`UPDATE qq_timed_sessions SET phase='playing', play_minutes=?, confirmed_at=?,
           play_ends_at=?, cooldown_ends_at=?, transition_task_name=?, reconcile_task_name=?, updated_at=?
