@@ -8,6 +8,79 @@ value = yaml.safe_load(sys.stdin.read())
 json.dump(value, sys.stdout, ensure_ascii=False)
 `;
 
+function splitInline(value) {
+  const parts = [];
+  let current = "";
+  let quote = null;
+  let escaped = false;
+  for (const char of value) {
+    if (escaped) { current += char; escaped = false; continue; }
+    if (quote === '"' && char === "\\") { current += char; escaped = true; continue; }
+    if ((char === '"' || char === "'") && (!quote || quote === char)) { quote = quote ? null : char; current += char; continue; }
+    if (char === "," && !quote) { parts.push(current.trim()); current = ""; continue; }
+    current += char;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function scalar(value) {
+  const text = value.trim();
+  if (text.startsWith("[") && text.endsWith("]")) return splitInline(text.slice(1, -1)).map(scalar);
+  if (text.startsWith('"') && text.endsWith('"')) return JSON.parse(text);
+  if (text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1).replace(/''/gu, "'");
+  if (text === "true") return true;
+  if (text === "false") return false;
+  if (text === "null" || text === "~") return null;
+  if (/^-?\d+(?:\.\d+)?$/u.test(text)) return Number(text);
+  return text;
+}
+
+function parseYamlSubset(source) {
+  const lines = source.split(/\r?\n/u).map((raw, line) => {
+    const withoutComment = raw.replace(/\s+#.*$/u, "");
+    return { line: line + 1, indent: withoutComment.match(/^\s*/u)[0].length, text: withoutComment.trim() };
+  }).filter((entry) => entry.text && !entry.text.startsWith("#"));
+  function block(start, indent) {
+    const sequence = lines[start]?.indent === indent && lines[start].text.startsWith("-");
+    const result = sequence ? [] : {};
+    let index = start;
+    while (index < lines.length && lines[index].indent === indent) {
+      const entry = lines[index];
+      if (sequence) {
+        if (!entry.text.startsWith("-")) break;
+        const content = entry.text.slice(1).trim();
+        if (!content) {
+          const child = block(index + 1, lines[index + 1]?.indent ?? indent + 2);
+          result.push(child.value); index = child.index; continue;
+        }
+        const match = /^(\S[^:]*):(?:\s*(.*))?$/u.exec(content);
+        if (!match) { result.push(scalar(content)); index++; continue; }
+        const object = {};
+        object[match[1].trim()] = match[2] ? scalar(match[2]) : block(index + 1, lines[index + 1]?.indent ?? indent + 2).value;
+        index++;
+        while (index < lines.length && lines[index].indent > indent) {
+          const child = lines[index];
+          const keyMatch = /^(\S[^:]*):(?:\s*(.*))?$/u.exec(child.text);
+          if (!keyMatch) throw new Error(`commands.yaml: unsupported syntax near line ${child.line}`);
+          if (child.indent !== indent + 2) throw new Error(`commands.yaml: invalid indentation near line ${child.line}`);
+          if (keyMatch[2]) { object[keyMatch[1].trim()] = scalar(keyMatch[2]); index++; }
+          else { const nested = block(index + 1, lines[index + 1]?.indent ?? child.indent + 2); object[keyMatch[1].trim()] = nested.value; index = nested.index; }
+        }
+        result.push(object);
+      } else {
+        const match = /^(\S[^:]*):(?:\s*(.*))?$/u.exec(entry.text);
+        if (!match) throw new Error(`commands.yaml: unsupported syntax near line ${entry.line}`);
+        const key = match[1].trim();
+        if (match[2]) { result[key] = scalar(match[2]); index++; }
+        else { const nested = block(index + 1, lines[index + 1]?.indent ?? indent + 2); result[key] = nested.value; index = nested.index; }
+      }
+    }
+    return { value: result, index };
+  }
+  return block(0, lines[0]?.indent ?? 0).value;
+}
+
 function freeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) freeze(child);
@@ -66,11 +139,16 @@ export function loadCommandConfig(planRoot, { pythonPath = process.env.MASHIROBO
       input: source,
       encoding: "utf8",
       windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, PYTHONIOENCODING: "utf-8" },
     });
     raw = JSON.parse(output);
   } catch (error) {
-    throw new Error(`commands.yaml cannot be parsed: ${error.message}`);
+    try {
+      raw = parseYamlSubset(source);
+    } catch (fallbackError) {
+      throw new Error(`commands.yaml cannot be parsed: ${error.message}; fallback parser: ${fallbackError.message}`);
+    }
   }
   const config = validate(raw);
   const result = {
