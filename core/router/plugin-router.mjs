@@ -147,6 +147,7 @@ export function createPluginRouter({
   clock,
   systemRouter,
   sqlitePath,
+  commandConfig,
   pluginHandleTimeoutMs = 60_000,
 } = {}) {
   if (!registry?.plugins || !registry?.byMenuIndex || !registry?.byExactCommand) {
@@ -200,24 +201,26 @@ export function createPluginRouter({
           logger,
           planRoot,
           sqlitePath,
+          commandConfig,
         },
       );
+      const routedText = context.commandConfig?.normalize(text) ?? text;
       const key = `${context.accountId}\0${context.conversationId}`;
 
       if (systemRouter) {
-        const systemResult = await systemRouter(text, context);
+        const systemResult = await systemRouter(routedText, context);
         if (systemResult) {
           metrics.pluginId = "mashirobot-core";
           return remember(normalizePluginResult(systemResult, "mashirobot-core"));
         }
       }
 
-      if (SCOPED_HELP_ALIASES.has(text)) {
-        const plugin = registry.plugins.find((entry) => entry.manifest.id === SCOPED_HELP_ALIASES.get(text));
+      if (SCOPED_HELP_ALIASES.has(routedText)) {
+        const plugin = registry.plugins.find((entry) => entry.manifest.id === SCOPED_HELP_ALIASES.get(routedText));
         if (plugin) return remember(await renderPluginHelp(plugin, { detailed: false, context }));
       }
 
-      if (HELP_ALIASES.has(text)) {
+      if (HELP_ALIASES.has(routedText)) {
         menuSessions.open(key);
         const helpStartedAt = performance.now();
         try {
@@ -266,16 +269,16 @@ export function createPluginRouter({
         }
       }
 
-      const exactPlugin = registry.byExactCommand.get(text);
+      const exactPlugin = registry.byExactCommand.get(routedText);
       if (exactPlugin) {
-        return remember(await invokePlugin(exactPlugin, text, context, metrics, pluginHandleTimeoutMs));
+        return remember(await invokePlugin(exactPlugin, routedText, context, metrics, pluginHandleTimeoutMs));
       }
 
       for (const plugin of registry.plugins) {
         let matched;
         const matchStartedAt = performance.now();
         try {
-          matched = plugin.module.match(text, context);
+          matched = plugin.module.match(routedText, context);
           if (thenable(matched)) {
             const error = new Error("match() must be synchronous and side-effect free");
             error.code = "PLUGIN_ASYNC_MATCH";
@@ -290,7 +293,7 @@ export function createPluginRouter({
           metrics.matchElapsedMs += Math.max(0, performance.now() - matchStartedAt);
         }
         if (matched) {
-          return remember(await invokePlugin(plugin, text, context, metrics, pluginHandleTimeoutMs));
+          return remember(await invokePlugin(plugin, routedText, context, metrics, pluginHandleTimeoutMs));
         }
       }
 

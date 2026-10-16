@@ -50,6 +50,7 @@ export function createMashiroBotContext(rawContext = {}, services = {}) {
     sqlitePath,
     tempRoot,
     requestId: String(services.requestId ?? rawContext.requestId ?? ""),
+    commandConfig: services.commandConfig ?? rawContext.commandConfig ?? null,
   };
 
   context.runLocalProcess = async (options) => {

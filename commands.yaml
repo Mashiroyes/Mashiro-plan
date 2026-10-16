@@ -1,0 +1,113 @@
+version: 1
+command_start:
+  - ""
+
+# User-facing command names, aliases and help text live here. Internal parser
+# kinds, permissions, limits and worker actions remain in source code.
+commands:
+  - id: core.help
+    plugin: mashirobot-core
+    names: ["help", "/help", "帮助"]
+    usage: "help | /help | 帮助"
+    description: "查看全部插件帮助"
+  - id: core.reminder-ack
+    plugin: mashirobot-core
+    names: ["收到", "收到了", "知道了", "不用提醒了"]
+    usage: "收到 [R编号]"
+    description: "停止最近一条提醒"
+  - id: plan.help
+    plugin: mashirobot-plugin-plan
+    names: ["/计划"]
+    detailed_names: ["/计划详细"]
+    usage: "/计划 [详细]"
+    description: "查看计划插件帮助"
+  - id: plan.schedule
+    plugin: mashirobot-plugin-plan
+    names: ["今日计划", "今天计划", "明天的计划", "今天的日程", "计划"]
+    usage: "今日计划\n09:00 - 10:00 任务"
+    description: "保存或查询计划"
+  - id: plan.record
+    plugin: mashirobot-plugin-plan
+    names: ["今日记录", "今天记录", "昨天记录"]
+    usage: "今日记录\n学习：3h"
+    description: "保存或查询每日记录"
+  - id: plan.reminder
+    plugin: mashirobot-plugin-plan
+    prefixes: ["提醒我", "提醒"]
+    names: ["提醒我"]
+    usage: "提醒我12点吃饭"
+    description: "创建通用提醒"
+  - id: plan.sleep
+    plugin: mashirobot-plugin-plan
+    names: ["已打卡", "没打卡", "已睡觉", "已起床"]
+    usage: "已睡觉 | 已起床"
+    description: "更新作息状态"
+  - id: game.help
+    plugin: mashirobot-plugin-game-timer
+    names: ["/游戏计时"]
+    detailed_names: ["/游戏计时详细"]
+    usage: "/游戏计时 [详细]"
+    description: "查看游戏计时帮助"
+  - id: game.timer
+    plugin: mashirobot-plugin-game-timer
+    prefixes: ["玩"]
+    names: ["玩"]
+    usage: "玩游戏名 30分钟"
+    description: "创建游戏计时"
+  - id: game.qq
+    plugin: mashirobot-plugin-game-timer
+    prefixes: ["玩QQ"]
+    names: ["玩QQ"]
+    usage: "玩QQ N分钟"
+    description: "限时使用QQ"
+  - id: game.manage
+    plugin: mashirobot-plugin-game-timer
+    names: ["加入游戏", "查看游戏", "查询游戏计时", "确认删除"]
+    usage: "加入游戏\nC:\\Games\\game.exe"
+    description: "管理游戏清单和计时"
+  - id: language.help
+    plugin: mashirobot-plugin-language
+    names: ["/语言"]
+    detailed_names: ["/语言详细"]
+    usage: "/语言 [详细]"
+    description: "查看英语学习帮助"
+  - id: language.teded
+    plugin: mashirobot-plugin-language
+    prefixes: ["今日英语听力"]
+    names: ["今日英语听力"]
+    usage: "今日英语听力：12 视频标题"
+    description: "记录 TED-Ed 听力"
+  - id: language.statistics
+    plugin: mashirobot-plugin-language
+    prefixes: ["英语统计图"]
+    names: ["英语统计图"]
+    usage: "英语统计图 | 本月英语统计图"
+    description: "查看英语学习统计"
+  - id: language.keywords
+    plugin: mashirobot-plugin-language
+    prefixes: ["英语关键词"]
+    names: ["英语关键词"]
+    usage: "英语关键词增加 阅读 单词"
+    description: "管理英语统计关键词"
+  - id: status.status
+    plugin: mashirobot-plugin-status
+    names: ["状态", "status", "/状态"]
+    detailed_names: ["/状态详细"]
+    usage: "状态"
+    description: "查看系统状态"
+  - id: status.hardware
+    plugin: mashirobot-plugin-status
+    names: ["硬件信息", "hardware", "/硬件信息"]
+    usage: "硬件信息"
+    description: "查看硬件信息"
+  - id: loot.entry
+    plugin: mashirobot-plugin-loot
+    names: ["爽点"]
+    usage: "爽点\n今天完成的内容"
+    description: "记录当天爽点"
+  - id: loot.help
+    plugin: mashirobot-plugin-loot
+    names: ["/战利品"]
+    detailed_names: ["/战利品详细"]
+    usage: "/战利品 [详细]"
+    description: "查看战利品帮助"

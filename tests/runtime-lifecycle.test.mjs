@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,6 +9,7 @@ function fixture(t) {
   const planRoot = mkdtempSync(path.join(os.tmpdir(), "mashiro-runtime-"));
   mkdirSync(path.join(planRoot, "plugin"), { recursive: true });
   mkdirSync(path.join(planRoot, "sqlite"), { recursive: true });
+  copyFileSync(path.join(process.cwd(), "commands.yaml"), path.join(planRoot, "commands.yaml"));
   t.after(() => rmSync(planRoot, { recursive: true, force: true }));
   return planRoot;
 }

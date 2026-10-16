@@ -18,6 +18,7 @@ import { createPluginRouter } from "../router/plugin-router.mjs";
 import { createClock } from "../time/clock.mjs";
 import { resolvePlanRoot } from "./plan-root.mjs";
 import { readRuntimeDescriptor } from "../deployment/runtime-descriptor.mjs";
+import { loadCommandConfig } from "../config/command-config.mjs";
 
 const defaultPlanRoot = resolvePlanRoot();
 
@@ -61,6 +62,7 @@ export async function createMashiroBotRuntime(options = {}) {
     // Development and isolated test runtimes may not have a machine descriptor.
   }
   const sqlitePath = path.resolve(options.sqlitePath ?? path.join(planRoot, "sqlite", "openclaw-planner.sqlite"));
+  const commandConfig = options.commandConfig ?? loadCommandConfig(planRoot, { pythonPath: process.env.MASHIROBOT_PYTHON });
   const backupRoot = path.resolve(options.backupRoot ?? path.join(planRoot, "sqlite", "backups", "control"));
   const logger = options.logger ?? appendMashiroLog;
   const processRunner = options.runLocalProcess ?? runLocalProcess;
@@ -89,7 +91,7 @@ export async function createMashiroBotRuntime(options = {}) {
   for (const plugin of registry.plugins) {
     if (typeof plugin.module.registerLifecycle !== "function") continue;
     try {
-      await plugin.module.registerLifecycle({ undoManager, lifecycleHooks, sqlitePath, planRoot, pluginRoot: plugin.directory, runLocalProcess: processRunner, logger, clock });
+      await plugin.module.registerLifecycle({ undoManager, lifecycleHooks, sqlitePath, planRoot, pluginRoot: plugin.directory, runLocalProcess: processRunner, logger, clock, commandConfig });
     } catch (error) {
       degraded = true;
       registry.failures.push({ code: "PLUGIN_LIFECYCLE_ERROR", pluginId: plugin.manifest.id, message: shortError(error) });
@@ -131,6 +133,7 @@ export async function createMashiroBotRuntime(options = {}) {
     helpService: options.helpService ?? createPictureHelpService(),
     planRoot,
     sqlitePath,
+    commandConfig,
     logger,
     runLocalProcess: processRunner,
     clock,
@@ -145,6 +148,7 @@ export async function createMashiroBotRuntime(options = {}) {
     registry,
     sqlitePath,
     planRoot,
+    commandConfig,
     handleMessage: (rawText, rawContext = {}) => routeMessage(rawText, rawContext),
     diagnostics: async () => runSystemDiagnostics({ sqlitePath, planRoot, jobInspection: await inspectTasks(), runner: processRunner, runtimeStatus: state }),
     getStatus: () => Object.freeze({ ...state, planRoot, sqlitePath, loadedPluginCount: registry.plugins.length }),

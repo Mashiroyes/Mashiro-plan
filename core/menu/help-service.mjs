@@ -96,11 +96,18 @@ function mainPayload(registry) {
   };
 }
 
-async function pluginPayload(plugin, detailed) {
+async function pluginPayload(plugin, detailed, commandConfig) {
   const help = await plugin.module.getHelp();
   const detailedCommand = help?.detailedCommand
     ?? plugin.manifest.exactCommands.find((command) => command.includes("详细"))
     ?? `/${plugin.manifest.name}详细`;
+  const configuredItems = (commandConfig?.commands ?? [])
+    .filter((command) => command.plugin === plugin.manifest.id && command.help !== false)
+    .map((command) => command.usage
+      ? `${command.usage}：${command.description}`
+      : `${command.names.join(" / ")}：${command.description}`);
+  const groups = [...(detailed ? help?.detailedGroups ?? help?.groups ?? [] : help?.groups ?? [])];
+  if (configuredItems.length) groups.push({ title: "可配置命令", items: configuredItems });
   return {
     kind: "plugin",
     detailed: Boolean(detailed),
@@ -112,7 +119,7 @@ async function pluginPayload(plugin, detailed) {
       menuIndex: plugin.manifest.menuIndex,
       detailedCommand,
     },
-    groups: detailed ? help?.detailedGroups ?? help?.groups ?? [] : help?.groups ?? [],
+    groups,
   };
 }
 
@@ -120,8 +127,8 @@ export async function renderMainMenu(registry, options = {}) {
   return (await renderPayload(mainPayload(registry), options))[0];
 }
 
-export async function renderPluginHelp(plugin, { detailed = false, ...options } = {}) {
-  return renderPayload(await pluginPayload(plugin, detailed), options);
+export async function renderPluginHelp(plugin, { detailed = false, commandConfig, ...options } = {}) {
+  return renderPayload(await pluginPayload(plugin, detailed, commandConfig), options);
 }
 
 export function prepareOutboundCopies(cachedPaths, { tempRoot = defaultTempRoot() } = {}) {
@@ -178,7 +185,7 @@ export function createPictureHelpService(defaultOptions = {}) {
     async renderPluginHelp(plugin, { detailed = false, context } = {}) {
       const options = requestOptions(context);
       try {
-        const cachedPaths = await renderPluginHelp(plugin, { ...options, detailed });
+        const cachedPaths = await renderPluginHelp(plugin, { ...options, detailed, commandConfig: context?.commandConfig });
         return {
           handled: true,
           command: detailed ? "插件详细帮助" : "插件帮助",
