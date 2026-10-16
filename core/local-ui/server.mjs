@@ -1,10 +1,10 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { resolvePlanSourcePath } from "../runtime/source-paths.mjs";
 
-const directory = path.dirname(fileURLToPath(import.meta.url));
+const directory = resolvePlanSourcePath("core", "local-ui");
 const pagePath = path.join(directory, "index.html");
 const mediaRoot = path.resolve(process.env.TEMP || path.join(process.cwd(), "temp"), "MashiroBot", "outbound");
 const mediaTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };

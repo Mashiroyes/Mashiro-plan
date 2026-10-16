@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { runLocalProcess } from "../../core/execution/local-process.mjs";
+import { resolvePlanSourcePath } from "../../core/runtime/source-paths.mjs";
 
-const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-plan");
 const planRoot = path.resolve(pluginRoot, "..", "..");
 const HEALTH_LEVELS = new Set(["file", "registered", "heartbeat", "verified"]);
 

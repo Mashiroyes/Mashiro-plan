@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolvePlanSourcePath } from "../runtime/source-paths.mjs";
 
 import { createContentCache } from "../cache/content-cache.mjs";
 import { runLocalProcess as sharedRunLocalProcess } from "../execution/local-process.mjs";
@@ -10,7 +10,7 @@ const RENDERER_VERSION = 3;
 const ASSET_VERSION = 3;
 const DEFAULT_MAX_ENTRIES = 128;
 const DEFAULT_MAX_BYTES = 128 * 1024 * 1024;
-const rendererPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "render_help.py");
+const rendererPath = resolvePlanSourcePath("core", "menu", "render_help.py");
 const cachePool = new Map();
 
 function stableValue(value) {

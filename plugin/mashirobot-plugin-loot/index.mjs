@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolvePlanSourcePath } from "../../core/runtime/source-paths.mjs";
 
 import { shanghaiParts } from "./core/dates.mjs";
 import { parseLootCommand } from "./core/parser.mjs";
 import { createLootStore } from "./core/store.mjs";
 
-const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-loot");
 
 function result(reply, command = "爽点") {
   return { handled: true, command, reply, mediaPaths: [] };

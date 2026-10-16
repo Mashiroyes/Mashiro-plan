@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createContentCache } from "../../core/cache/content-cache.mjs";
+import { resolvePlanSourcePath } from "../../core/runtime/source-paths.mjs";
 import { collectStatus, formatRuntime, normalizeStatus } from "./core/collector.mjs";
 import { createStatusCache } from "./core/status-cache.mjs";
 
-const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-status");
 const rendererPath = path.join(pluginRoot, "render", "status-card.py");
 const STATUS_COMMANDS = new Set(["状态", "status", "/状态"]);
 const HARDWARE_COMMANDS = new Set(["硬件信息", "hardware", "/硬件信息"]);

@@ -1,12 +1,12 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolvePlanSourcePath } from "../../core/runtime/source-paths.mjs";
 
 import { createPlanRuntime, plannerRuntimePaths } from "../mashirobot-plugin-plan/bridge/planner-runner.mjs";
 import { shiftDate } from "../mashirobot-plugin-plan/shared/dates.mjs";
 import { formatReviewDates, parseTedEdListening, shanghaiDate, TEDED_REVIEW_STATE_KEY, upsertTedEdVideo } from "./teded-review.mjs";
 
-const pluginRoot = path.dirname(fileURLToPath(import.meta.url));
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-language");
 const defaultKeywordsPath = path.join(pluginRoot, "config", "english-skill-keywords.json");
 const LABELS = { listening: "听", speaking: "说", reading: "读", writing: "写", anki: "Anki" };
 const KEYWORD_LABELS = { listening: "听力", speaking: "口语", reading: "阅读", writing: "写作" };

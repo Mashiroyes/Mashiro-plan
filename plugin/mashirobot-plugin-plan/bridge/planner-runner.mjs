@@ -3,12 +3,12 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { createContentCache } from "../../../core/cache/content-cache.mjs";
 import { runLocalProcess as defaultRunLocalProcess } from "../../../core/execution/local-process.mjs";
+import { resolvePlanSourcePath } from "../../../core/runtime/source-paths.mjs";
 
-const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-plan");
 const plannerCli = path.join(pluginRoot, "planner", "planner.py");
 const recordChartRenderer = path.join(pluginRoot, "planner", "chart.py");
 const englishChartRenderer = path.join(pluginRoot, "planner", "english_skills_chart.py");

@@ -1,8 +1,8 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { runLocalProcess as defaultRunLocalProcess } from "../../../core/execution/local-process.mjs";
+import { resolvePlanSourcePath } from "../../../core/runtime/source-paths.mjs";
 
-const pluginRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const pluginRoot = resolvePlanSourcePath("plugin", "mashirobot-plugin-status");
 const collectorPath = path.join(pluginRoot, "powershell", "status-collector.ps1");
 
 function finite(value, fallback = 0) {
